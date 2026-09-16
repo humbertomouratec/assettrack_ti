@@ -24,7 +24,7 @@ func (Localizacao) TableName() string { return "locais" }
 // Armazenamento maps to "armazenamentos" table
 type Armazenamento struct {
 	ID            uint    `gorm:"primaryKey" json:"id"`
-	Nome          string  `gorm:"uniqueIndex:idx_armazenamentos_nome;not null" json:"nome"`
+	Nome          string  `gorm:"unique;not null" json:"nome"`
 	CapacidadeMax int     `gorm:"default:0" json:"capacidade_max"`
 	TipoItens     *string `json:"tipo_itens"`
 }
