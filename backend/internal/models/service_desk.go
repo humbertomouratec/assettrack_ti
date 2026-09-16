@@ -27,7 +27,7 @@ const (
 
 type ServiceCategory struct {
 	ID        uint                `gorm:"primaryKey" json:"id"`
-	Nome      string              `gorm:"uniqueIndex;not null;type:varchar(100)" json:"nome"`
+	Nome      string              `gorm:"unique;not null;type:varchar(100)" json:"nome"`
 	Descricao *string             `gorm:"type:text" json:"descricao"`
 	Setor     string              `gorm:"type:varchar(50);not null" json:"setor"`
 	Servicos  []ServiceDefinition `gorm:"foreignKey:CategoriaID;constraint:OnDelete:CASCADE" json:"servicos,omitempty"`
@@ -50,7 +50,7 @@ func (ServiceDefinition) TableName() string { return "service_definitions" }
 
 type ServiceTicket struct {
 	ID              uint            `gorm:"primaryKey" json:"id"`
-	Codigo          string          `gorm:"uniqueIndex;not null;type:varchar(20)" json:"codigo"`
+	Codigo          string          `gorm:"unique;not null;type:varchar(20)" json:"codigo"`
 	ServicoID       uint            `gorm:"not null" json:"servico_id"`
 	SolicitanteID   uint            `gorm:"not null" json:"solicitante_id"`
 	TecnicoID       *uint           `json:"tecnico_id"`

@@ -22,16 +22,16 @@ var ValidRoles = []string{
 // User maps to the existing "users" table
 type User struct {
 	ID               uint       `gorm:"primaryKey" json:"id"`
-	Email            string     `gorm:"uniqueIndex;not null" json:"email"`
+	Email            string     `gorm:"unique;not null" json:"email"`
 	HashedPassword   string     `gorm:"column:hashed_password;not null" json:"-"`
 	Nome             string     `gorm:"not null" json:"nome"`
-	Matricula        *string    `gorm:"uniqueIndex" json:"matricula"`
+	Matricula        *string    `gorm:"unique" json:"matricula"`
 	Cargo            *string    `json:"cargo"`
 	Role             string     `gorm:"type:varchar(20);default:'usuario_comum'" json:"role"`
 	IsActive         bool       `gorm:"default:false" json:"is_active"`
 	ShowOnMonitoring bool       `gorm:"column:show_on_monitoring;default:false" json:"show_on_monitoring"`
 	AvatarURL        *string    `gorm:"column:avatar_url" json:"avatar_url"`
-	QRToken          *string    `gorm:"column:qr_token;uniqueIndex" json:"-"`
+	QRToken          *string    `gorm:"column:qr_token;unique" json:"-"`
 	QRTokenCreatedAt *time.Time `gorm:"column:qr_token_created_at" json:"-"`
 	PINHash          *string    `gorm:"column:pin_hash" json:"-"`
 	DepartamentoID   *uint      `gorm:"column:departamento_id" json:"departamento_id"`

@@ -65,7 +65,7 @@ const (
 type MaintenancePlan struct {
 	ID                 uint     `gorm:"primaryKey" json:"id"`
 	Nome               string   `gorm:"size:200;not null;index" json:"nome"`
-	Codigo             string   `gorm:"size:50;uniqueIndex;not null" json:"codigo"`
+	Codigo             string   `gorm:"size:50;unique;not null" json:"codigo"`
 	Descricao          *string  `gorm:"type:text" json:"descricao"`
 	Tipo               string   `gorm:"size:30;default:'Preventiva'" json:"tipo"`
 	Periodicidade      string   `gorm:"size:30;default:'Mensal'" json:"periodicidade"`
@@ -132,7 +132,7 @@ func (MaintenanceChecklistItem) TableName() string { return "maintenance_checkli
 
 type MaintenanceOrder struct {
 	ID                  uint    `gorm:"primaryKey" json:"id"`
-	Numero              string  `gorm:"size:50;uniqueIndex;not null" json:"numero"`
+	Numero              string  `gorm:"size:50;unique;not null" json:"numero"`
 	PlanID              *uint   `gorm:"column:plan_id" json:"plan_id"`
 	AssetID             *uint   `gorm:"column:asset_id" json:"asset_id"`
 	InfraPredialServico *string `gorm:"column:infra_predial_servico;size:255" json:"infra_predial_servico"`
@@ -260,7 +260,7 @@ func (MaintenanceNotification) TableName() string { return "maintenance_notifica
 
 type CustomMaintenanceType struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Nome      string    `gorm:"size:200;not null;uniqueIndex" json:"nome"`
+	Nome      string    `gorm:"size:200;not null;unique" json:"nome"`
 	Descricao *string   `gorm:"type:text" json:"descricao"`
 	CriadoEm  time.Time `gorm:"column:criado_em;default:CURRENT_TIMESTAMP" json:"criado_em"`
 }

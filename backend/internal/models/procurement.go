@@ -80,7 +80,7 @@ const (
 
 type PurchaseCategory struct {
 	ID        uint    `gorm:"primaryKey" json:"id"`
-	Nome      string  `gorm:"size:100;uniqueIndex;not null" json:"nome"`
+	Nome      string  `gorm:"size:100;unique;not null" json:"nome"`
 	Descricao *string `gorm:"size:255" json:"descricao"`
 	Ativo     bool    `gorm:"default:true" json:"ativo"`
 
@@ -91,7 +91,7 @@ func (PurchaseCategory) TableName() string { return "purchase_categories" }
 
 type PurchaseUnit struct {
 	ID        uint    `gorm:"primaryKey" json:"id"`
-	Sigla     string  `gorm:"size:20;uniqueIndex;not null" json:"sigla"`
+	Sigla     string  `gorm:"size:20;unique;not null" json:"sigla"`
 	Descricao *string `gorm:"size:100" json:"descricao"`
 }
 
@@ -99,7 +99,7 @@ func (PurchaseUnit) TableName() string { return "purchase_units" }
 
 type PurchaseProduct struct {
 	ID          uint    `gorm:"primaryKey" json:"id"`
-	Codigo      string  `gorm:"size:50;uniqueIndex;not null" json:"codigo"`
+	Codigo      string  `gorm:"size:50;unique;not null" json:"codigo"`
 	Nome        string  `gorm:"size:150;index;not null" json:"nome"`
 	CategoriaID uint    `gorm:"column:categoria_id;not null" json:"categoria_id"`
 	Unidade     string  `gorm:"size:20;default:'UN'" json:"unidade"`
@@ -119,7 +119,7 @@ func (PurchaseProduct) TableName() string { return "purchase_products" }
 
 type CostCenter struct {
 	ID             uint   `gorm:"primaryKey" json:"id"`
-	Codigo         string `gorm:"size:50;uniqueIndex;not null" json:"codigo"`
+	Codigo         string `gorm:"size:50;unique;not null" json:"codigo"`
 	Nome           string `gorm:"size:100;index;not null" json:"nome"`
 	DepartamentoID *uint  `gorm:"column:departamento_id" json:"departamento_id"`
 	ResponsavelID  *uint  `gorm:"column:responsavel_id" json:"responsavel_id"`
@@ -140,7 +140,7 @@ func (CostCenter) TableName() string { return "cost_centers" }
 
 type PurchaseRequest struct {
 	ID             uint   `gorm:"primaryKey" json:"id"`
-	Numero         string `gorm:"size:50;uniqueIndex;not null" json:"numero"`
+	Numero         string `gorm:"size:50;unique;not null" json:"numero"`
 	SolicitanteID  uint   `gorm:"column:solicitante_id;not null" json:"solicitante_id"`
 	DepartamentoID uint   `gorm:"column:departamento_id;not null" json:"departamento_id"`
 	CentroCustoID  uint   `gorm:"column:centro_custo_id;not null" json:"centro_custo_id"`
@@ -200,7 +200,7 @@ func (PurchaseApproval) TableName() string { return "purchase_approvals" }
 
 type PurchaseQuotation struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
-	Numero      string    `gorm:"size:50;uniqueIndex;not null" json:"numero"`
+	Numero      string    `gorm:"size:50;unique;not null" json:"numero"`
 	RequestID   uint      `gorm:"column:request_id;not null" json:"request_id"`
 	DataCriacao time.Time `gorm:"column:data_criacao;default:CURRENT_TIMESTAMP" json:"data_criacao"`
 	Status      string    `gorm:"size:20;default:'Em cotação'" json:"status"`
@@ -246,7 +246,7 @@ func (PurchaseQuotationItem) TableName() string { return "purchase_quotation_ite
 
 type PurchaseOrder struct {
 	ID            uint   `gorm:"primaryKey" json:"id"`
-	Numero        string `gorm:"size:50;uniqueIndex;not null" json:"numero"`
+	Numero        string `gorm:"size:50;unique;not null" json:"numero"`
 	FornecedorID  uint   `gorm:"column:fornecedor_id;not null" json:"fornecedor_id"`
 	CentroCustoID uint   `gorm:"column:centro_custo_id;not null" json:"centro_custo_id"`
 	RequestID     *uint  `gorm:"column:request_id" json:"request_id"`
@@ -325,7 +325,7 @@ func (PurchaseReceivingItem) TableName() string { return "purchase_receiving_ite
 
 type ContractType struct {
 	ID        uint    `gorm:"primaryKey" json:"id"`
-	Nome      string  `gorm:"size:100;uniqueIndex;not null" json:"nome"`
+	Nome      string  `gorm:"size:100;unique;not null" json:"nome"`
 	Descricao *string `gorm:"size:255" json:"descricao"`
 	Ativo     bool    `gorm:"default:true" json:"ativo"`
 
@@ -339,7 +339,7 @@ type PurchaseContract struct {
 	FornecedorID        uint      `gorm:"column:fornecedor_id;not null" json:"fornecedor_id"`
 	Tipo                string    `gorm:"size:100;not null" json:"tipo"`
 	TipoID              *uint     `gorm:"column:tipo_id" json:"tipo_id"`
-	Numero              string    `gorm:"size:100;uniqueIndex;not null" json:"numero"`
+	Numero              string    `gorm:"size:100;unique;not null" json:"numero"`
 	DataInicio          time.Time `gorm:"column:data_inicio;not null" json:"data_inicio"`
 	DataFim             time.Time `gorm:"column:data_fim;not null;index" json:"data_fim"`
 	RenovacaoAutomatica bool      `gorm:"column:renovacao_automatica;default:false" json:"renovacao_automatica"`
@@ -396,7 +396,7 @@ func (PurchaseNotification) TableName() string { return "purchase_notifications"
 
 type MaterialStock struct {
 	ID                      uint    `gorm:"primaryKey" json:"id"`
-	ProductID               uint    `gorm:"column:product_id;uniqueIndex;not null" json:"product_id"`
+	ProductID               uint    `gorm:"column:product_id;unique;not null" json:"product_id"`
 	QuantidadeSaldo         float64 `gorm:"column:quantidade_saldo;type:numeric(10,2);default:0" json:"quantidade_saldo"`
 	LocalizacaoAlmoxarifado *string `gorm:"column:localizacao_almoxarifado;size:100" json:"localizacao_almoxarifado"`
 
@@ -424,7 +424,7 @@ func (MaterialStockTransaction) TableName() string { return "material_stock_tran
 
 type PurchaseResearch struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
-	Numero        string    `gorm:"size:50;uniqueIndex;not null" json:"numero"`
+	Numero        string    `gorm:"size:50;unique;not null" json:"numero"`
 	SolicitanteID uint      `gorm:"column:solicitante_id;not null" json:"solicitante_id"`
 	Titulo        string    `gorm:"size:100;not null" json:"titulo"`
 	Justificativa string    `gorm:"type:text;not null" json:"justificativa"`

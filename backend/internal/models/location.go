@@ -3,7 +3,7 @@ package models
 // Departamento maps to "departamentos" table
 type Departamento struct {
 	ID            uint   `gorm:"primaryKey" json:"id"`
-	Nome          string `gorm:"uniqueIndex;not null" json:"nome"`
+	Nome          string `gorm:"unique;not null" json:"nome"`
 	ResponsavelID *uint  `gorm:"column:responsavel_id" json:"responsavel_id"`
 	Responsavel   *User  `gorm:"foreignKey:ResponsavelID" json:"responsavel,omitempty"`
 }

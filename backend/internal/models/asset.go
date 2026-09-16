@@ -17,7 +17,7 @@ const (
 type Asset struct {
 	ID                     uint        `gorm:"primaryKey" json:"id"`
 	Nome                   string      `gorm:"not null;index" json:"nome"`
-	EPatrimonio            string      `gorm:"uniqueIndex;not null;column:e_patrimonio" json:"e_patrimonio"`
+	EPatrimonio            string      `gorm:"unique;not null;column:e_patrimonio" json:"e_patrimonio"`
 	Modelo                 *string     `json:"modelo"`
 	Descricao              *string     `gorm:"type:text" json:"descricao"`
 	DataAquisicao          *time.Time  `json:"data_aquisicao"`
