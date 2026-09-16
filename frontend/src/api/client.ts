@@ -29,7 +29,9 @@ export const applicationUrlToApiBaseUrl = (value?: string | null) => {
 
 export const IS_NATIVE_APP = Capacitor.isNativePlatform();
 export const CONFIGURED_APPLICATION_URL = typeof window !== 'undefined'
-  ? normalizeApplicationUrl(localStorage.getItem(CUSTOM_APP_URL_KEY))
+  ? IS_NATIVE_APP
+    ? normalizeApplicationUrl(localStorage.getItem(CUSTOM_APP_URL_KEY))
+    : ''
   : '';
 
 const getApiBaseUrl = () => {
@@ -40,6 +42,14 @@ const getApiBaseUrl = () => {
   const configuredUrl = import.meta.env.VITE_API_URL;
   if (configuredUrl) {
     if (configuredUrl.startsWith('/')) return configuredUrl;
+
+    // In a Docker/Nginx web deployment, keep API calls on the same origin.
+    // This avoids baking a VM IP into the browser bundle and lets the proxy
+    // route requests to the API container, even when the VM address changes.
+    if (!IS_NATIVE_APP && !['3000', '5173'].includes(window.location.port)) {
+      return API_PATH;
+    }
+
     return applicationUrlToApiBaseUrl(configuredUrl);
   }
 
