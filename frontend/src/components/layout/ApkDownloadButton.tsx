@@ -6,9 +6,10 @@ import { APP_CONFIG } from '../../config/appVersion';
 interface ApkDownloadButtonProps {
   className?: string;
   variant?: 'header' | 'sidebar';
+  compact?: boolean;
 }
 
-export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className = '', variant = 'header' }) => {
+export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className = '', variant = 'header', compact = false }) => {
   const [modalOpen, setModalOpen] = useState(false);
 
   if (variant === 'sidebar') {
@@ -17,14 +18,19 @@ export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className 
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className={`flex items-center space-x-2 w-full p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded transition-all text-xs font-mono font-bold uppercase ${className}`}
+          className={`flex items-center w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded transition-all text-xs font-mono font-bold uppercase ${compact ? 'justify-center p-2.5' : 'space-x-2 p-2.5'} ${className}`}
           title="Baixar Aplicativo Android (APK)"
+          aria-label="Baixar Aplicativo Android (APK)"
         >
           <Smartphone size={16} />
-          <span>Baixar App Android</span>
-          <span className="ml-auto bg-emerald-500 text-brand-dark px-1.5 py-0.2 rounded text-[10px]">
-            v{APP_CONFIG.CURRENT_VERSION_NAME}
-          </span>
+          {!compact && (
+            <>
+              <span>Baixar App Android</span>
+              <span className="ml-auto bg-emerald-500 text-brand-dark px-1.5 py-0.2 rounded text-[10px]">
+                v{APP_CONFIG.CURRENT_VERSION_NAME}
+              </span>
+            </>
+          )}
         </button>
         <ApkDownloadModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
       </>

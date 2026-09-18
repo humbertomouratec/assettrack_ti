@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { toApiFileUrl } from '../../api/client';
 import { getFeatureFlags, type FeatureFlags } from '../../api/features';
+import { ApkDownloadButton } from './ApkDownloadButton';
 import {
   LayoutDashboard,
   Users,
@@ -229,6 +230,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
             </>
           )}
         </nav>
+      </div>
+
+      {/* Android app download */}
+      <div className={`p-3 shrink-0 border-t border-brand-border ${!isMobileView && collapsed ? 'px-2' : ''}`}>
+        <ApkDownloadButton variant="sidebar" compact={!isMobileView && collapsed} />
       </div>
 
       {/* Logout */}

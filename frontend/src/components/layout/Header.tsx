@@ -5,7 +5,6 @@ import { Bell, CircleHelp, Home, Search, Settings, ShieldCheck, ShieldAlert, Use
 import type { LucideIcon } from 'lucide-react';
 import { triggerEmergencyAlertModal } from '../emergency/EmergencyGlobalHandler';
 import { OfflineStatusIndicator } from './OfflineStatusIndicator';
-import { ApkDownloadButton } from './ApkDownloadButton';
 
 interface HeaderProps {
   onOpenMobileMenu?: () => void;
@@ -201,9 +200,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* APK Download Button for Web Users */}
-        <ApkDownloadButton />
-
         {/* Offline Status & Sync Indicator */}
         <OfflineStatusIndicator />
 
