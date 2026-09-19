@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
 FROM node:22-trixie-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata postgresql-client bash openjdk-21-jdk python3 \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata postgresql-client bash default-jdk-headless python3 \
     && rm -rf /var/lib/apt/lists/*
 ENV TZ=America/Sao_Paulo
 
