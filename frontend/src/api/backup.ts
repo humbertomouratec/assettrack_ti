@@ -38,9 +38,8 @@ export const backupApi = {
     formData.append('restore_confirmation', 'RESTAURAR');
 
     const res = await api.post<{ message: string }>('/backups/restore', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // Let Axios/browser set the multipart boundary automatically.
+      // Manually setting this header can make the API reject the upload.
     });
     return res.data;
   },

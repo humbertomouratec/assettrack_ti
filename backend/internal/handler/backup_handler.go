@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -54,6 +55,15 @@ func getStatus() (bool, string) {
 	return backupRunning, backupMsg
 }
 
+// normalizePostgresDump keeps dumps produced by newer pg_dump clients
+// restorable on the PostgreSQL version used by the application.
+func normalizePostgresDump(sqlBytes []byte) []byte {
+	sql := string(sqlBytes)
+	sql = strings.ReplaceAll(sql, "SET transaction_timeout = 0;\r\n", "")
+	sql = strings.ReplaceAll(sql, "SET transaction_timeout = 0;\n", "")
+	return []byte(sql)
+}
+
 // GenerateBackup triggers an async pg_dump + zip
 func (h *BackupHandler) GenerateBackup(c *gin.Context) {
 	running, _ := getStatus()
@@ -82,16 +92,16 @@ func (h *BackupHandler) GenerateBackup(c *gin.Context) {
 		defer zipWriter.Close()
 
 		setStatus(true, "Gerando dump do banco de dados (pg_dump)...")
-		
+
 		// Run pg_dump
 		// Note: Requires postgresql-client to be installed in the server/docker environment
 		cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--inserts", h.cfg.DatabaseURL)
-		
+
 		var out bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &stderr
-		
+
 		if err := cmd.Run(); err != nil {
 			setStatus(false, "Erro no pg_dump: "+err.Error()+"\nDetails: "+stderr.String())
 			os.Remove(zipFileName)
@@ -105,7 +115,10 @@ func (h *BackupHandler) GenerateBackup(c *gin.Context) {
 			setStatus(false, "Erro ao adicionar SQL no ZIP: "+err.Error())
 			return
 		}
-		dbWriter.Write(out.Bytes())
+		if _, err := dbWriter.Write(normalizePostgresDump(out.Bytes())); err != nil {
+			setStatus(false, "Erro ao escrever dump SQL no ZIP: "+err.Error())
+			return
+		}
 
 		// Zip uploads folder
 		setStatus(true, "Comprimindo arquivos de mídia (uploads/)...")
@@ -162,7 +175,7 @@ type BackupFile struct {
 // List available backups
 func (h *BackupHandler) List(c *gin.Context) {
 	var files []BackupFile
-	
+
 	entries, err := os.ReadDir("backups")
 	if err != nil {
 		c.JSON(http.StatusOK, []BackupFile{}) // return empty if folder missing
@@ -336,19 +349,21 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 	// Restore database first. Media is only extracted after the SQL succeeds.
 	for _, f := range zipReader.File {
 		if f.Name == "database.sql" {
-			// Extract to temp file
-			tmpSqlPath := filepath.Join("backups", "restore_db.sql")
-			dst, err := os.Create(tmpSqlPath)
+			// Extract to a unique temporary file. The restore operation is run in a
+			// single database transaction so a failed import cannot leave the
+			// current database truncated or partially restored.
+			tmpSQL, err := os.CreateTemp("backups", "restore-db-*.sql")
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro IO sql"})
 				return
 			}
+			tmpSqlPath := tmpSQL.Name()
+			defer os.Remove(tmpSqlPath)
 			src, _ := f.Open()
 			sqlBytes, readErr := io.ReadAll(src)
 			src.Close()
 			if readErr != nil {
-				dst.Close()
-				os.Remove(tmpSqlPath)
+				tmpSQL.Close()
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao ler database.sql"})
 				return
 			}
@@ -358,6 +373,9 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 			sqlBytes = []byte(strings.ReplaceAll(string(sqlBytes), "kanban_project_participants", "kanban_project_participantes"))
 			sqlBytes = []byte(strings.ReplaceAll(string(sqlBytes), `INSERT INTO "kanban_project_participantes" ("project_id", "user_id")`, `INSERT INTO "kanban_project_participantes" ("kanban_project_id", "user_id")`))
 			sqlBytes = []byte(strings.ReplaceAll(string(sqlBytes), `INSERT INTO "kanban_card_participantes" ("card_id", "user_id")`, `INSERT INTO "kanban_card_participantes" ("kanban_card_id", "user_id")`))
+			// pg_dump 17 can emit this setting even when the target server is
+			// PostgreSQL 15, where transaction_timeout does not exist.
+			sqlBytes = normalizePostgresDump(sqlBytes)
 			// The responsibility-term timestamp was renamed in the current schema.
 			sqlBytes = []byte(strings.ReplaceAll(string(sqlBytes), `"conteudo_termo", "data_criacao", "data_assinatura"`, `"conteudo_termo", "data_geracao", "data_assinatura"`))
 			// Legacy role values were stored in upper case; normalize them to the
@@ -369,41 +387,48 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 				"'COMPRADOR'", "'comprador'",
 				"'RH'", "'rh'",
 			).Replace(string(sqlBytes)))
-			dst.Write(sqlBytes)
-			dst.Close()
-
-			// Legacy backups contain INSERT statements only. Clear the current schema first
-			// so a restore is deterministic rather than a partial merge with key conflicts.
-			truncateCmd := exec.Command("psql", h.cfg.DatabaseURL, "-v", "ON_ERROR_STOP=1", "-c", "DO $$ DECLARE tables text; BEGIN SELECT string_agg(format('%I.%I', schemaname, tablename), ', ') INTO tables FROM pg_tables WHERE schemaname = 'public'; IF tables IS NOT NULL THEN EXECUTE 'TRUNCATE TABLE ' || tables || ' RESTART IDENTITY CASCADE'; END IF; END $$;")
-			var truncateErr bytes.Buffer
-			truncateCmd.Stderr = &truncateErr
-			if err := truncateCmd.Run(); err != nil {
-				os.Remove(tmpSqlPath)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao preparar banco para restauração: " + truncateErr.String()})
+			truncateSQL := "DO $$ DECLARE tables text; BEGIN SELECT string_agg(format('%I.%I', schemaname, tablename), ', ') INTO tables FROM pg_tables WHERE schemaname = 'public'; IF tables IS NOT NULL THEN EXECUTE 'TRUNCATE TABLE ' || tables || ' RESTART IDENTITY CASCADE'; END IF; END $$;\n"
+			if _, err := tmpSQL.Write(append([]byte(truncateSQL), sqlBytes...)); err != nil {
+				tmpSQL.Close()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao preparar SQL para restauração"})
+				return
+			}
+			if err := tmpSQL.Close(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao finalizar SQL temporário"})
 				return
 			}
 
-			cmd := exec.Command("psql", h.cfg.DatabaseURL, "-v", "ON_ERROR_STOP=1", "-f", tmpSqlPath)
+			cmd := exec.Command("psql", h.cfg.DatabaseURL, "--single-transaction", "-v", "ON_ERROR_STOP=1", "-f", tmpSqlPath)
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
-				os.Remove(tmpSqlPath)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao restaurar banco (psql): " + stderr.String()})
+				details := strings.TrimSpace(stderr.String())
+				log.Printf("[BACKUP] restore database failed: %s", details)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao restaurar banco (psql): " + details})
 				return
 			}
-			os.Remove(tmpSqlPath)
 		}
 	}
 
 	for _, f := range zipReader.File {
-		if !strings.HasPrefix(f.Name, "uploads/") { continue }
+		if !strings.HasPrefix(f.Name, "uploads/") {
+			continue
+		}
 		targetPath := filepath.Join(".", filepath.Clean(f.Name))
-		if f.FileInfo().IsDir() { os.MkdirAll(targetPath, os.ModePerm); continue }
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(targetPath, os.ModePerm)
+			continue
+		}
 		os.MkdirAll(filepath.Dir(targetPath), os.ModePerm)
 		dst, err := os.Create(targetPath)
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		src, err := f.Open()
-		if err == nil { io.Copy(dst, src); src.Close() }
+		if err == nil {
+			io.Copy(dst, src)
+			src.Close()
+		}
 		dst.Close()
 	}
 

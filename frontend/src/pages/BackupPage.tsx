@@ -110,7 +110,15 @@ export const BackupPage: React.FC = () => {
       // Force reload page to clear state and re-authenticate
       window.location.reload();
     } catch (err: any) {
-      setRestoreError(err.response?.data?.error || 'Não foi possível restaurar o backup.');
+      const responseError = err.response?.data?.error;
+      const responseMessage = err.response?.data?.message;
+      setRestoreError(
+        responseError ||
+        responseMessage ||
+        (err.response?.status === 413
+          ? 'O arquivo excede o limite permitido para upload.'
+          : 'Não foi possível restaurar o backup. Verifique o arquivo e tente novamente.')
+      );
     } finally {
       setUploading(false);
     }

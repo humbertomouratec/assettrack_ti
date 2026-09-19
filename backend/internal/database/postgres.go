@@ -15,7 +15,10 @@ func ConnectPostgres(dsn string) *gorm.DB {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:                 logger.Default.LogMode(logger.Warn),
 		SkipDefaultTransaction: true,
-		PrepareStmt:            true,
+		// Restores and auto-migrations can recreate tables. Keeping prepared
+		// statements across those schema changes causes PostgreSQL to return
+		// "cached plan must not change result type" on the next request.
+		PrepareStmt: false,
 		// User and Departamento reference each other. Deferring FK creation
 		// avoids a first-install migration ordering cycle on PostgreSQL.
 		DisableForeignKeyConstraintWhenMigrating: true,

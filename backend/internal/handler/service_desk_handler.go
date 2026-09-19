@@ -177,13 +177,29 @@ func (h *ServiceDeskHandler) CreateTicket(c *gin.Context) {
 	}
 
 	ticket.SolicitanteID = user.ID
-	ticket.Status = models.ServiceStatusAberto
+	if ticket.TecnicoID != nil {
+		if !isStaff(user.Role) {
+			c.JSON(http.StatusForbidden, gin.H{"detail": "Apenas a equipe técnica pode atribuir um chamado na abertura"})
+			return
+		}
+		assignee, err := h.userRepo.GetByID(*ticket.TecnicoID)
+		if err != nil || !isStaff(assignee.Role) || !assignee.IsActive {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": "O responsável selecionado não é um membro ativo da equipe técnica"})
+			return
+		}
+		ticket.Status = models.ServiceStatusEmAtendimento
+	} else {
+		ticket.Status = models.ServiceStatusAberto
+	}
 
 	if err := h.repo.CreateTicket(&ticket); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 	h.notifyStaff(user.ID, ticket, "ticket_opened", "Novo chamado aberto", fmt.Sprintf("%s abriu o chamado %s (%s).", user.Nome, ticket.Codigo, ticket.Prioridade))
+	if ticket.TecnicoID != nil {
+		h.notify([]uint{*ticket.TecnicoID}, user.ID, ticket, "ticket_assigned", "Chamado atribuído a você", fmt.Sprintf("Você foi designado para o chamado %s.", ticket.Codigo))
+	}
 	c.JSON(http.StatusCreated, ticket)
 }
 
@@ -235,6 +251,24 @@ func (h *ServiceDeskHandler) UpdateTicket(c *gin.Context) {
 	// Normalize technician ID
 	if req.TecnicoID == nil && req.ResponsavelID != nil {
 		req.TecnicoID = req.ResponsavelID
+	}
+	// Ao iniciar o atendimento, um técnico sem atribuição assume automaticamente o chamado.
+	if req.TecnicoID == nil && req.Status != nil && isStaff(user.Role) && user.Role == models.RoleTecnico {
+		status := strings.ToLower(strings.ReplaceAll(string(*req.Status), " ", "_"))
+		if status == "em_atendimento" || status == "em_andamento" {
+			req.TecnicoID = &user.ID
+		}
+	}
+	if req.TecnicoID != nil {
+		if !isStaff(user.Role) {
+			c.JSON(http.StatusForbidden, gin.H{"detail": "Apenas técnicos e gerentes podem atribuir chamados"})
+			return
+		}
+		assignee, lookupErr := h.userRepo.GetByID(*req.TecnicoID)
+		if lookupErr != nil || !isStaff(assignee.Role) || !assignee.IsActive {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": "O responsável selecionado não é um membro ativo da equipe técnica"})
+			return
+		}
 	}
 	// Normalize solution note
 	if req.Solucao == nil && req.NotaResolucao != nil {

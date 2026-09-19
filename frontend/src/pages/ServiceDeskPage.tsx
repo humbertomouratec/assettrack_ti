@@ -25,7 +25,8 @@ import {
 export const ServiceDeskPage: React.FC = () => {
   const location = useLocation();
   const { user: currentUser } = useAuthStore();
-  const isTechnicianOrAbove = currentUser?.role === 'admin' || currentUser?.role === 'gerente_ti' || currentUser?.role === 'tecnico';
+  const isTechnicianOrAbove = currentUser?.role === 'admin' || currentUser?.role === 'gerente_ti' || currentUser?.role === 'gerente_infra' || currentUser?.role === 'tecnico';
+  const isTechnician = currentUser?.role === 'tecnico';
 
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
@@ -45,6 +46,7 @@ export const ServiceDeskPage: React.FC = () => {
   const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState<'baixa' | 'media' | 'alta' | 'urgente'>('media');
   const [selectedDefinitionId, setSelectedDefinitionId] = useState<number | ''>('');
+  const [newAssignedTechId, setNewAssignedTechId] = useState<number | ''>('');
   const [newTicketAttachedFile, setNewTicketAttachedFile] = useState<File | null>(null);
   const [newTicketAttachedPath, setNewTicketAttachedPath] = useState<string>('');
   const [newTicketUploading, setNewTicketUploading] = useState(false);
@@ -226,7 +228,7 @@ export const ServiceDeskPage: React.FC = () => {
       if (isTechnicianOrAbove) {
         const usersData = await usersApi.list();
         // filter technicians
-        const techs = usersData.filter(u => u.role === 'tecnico' || u.role === 'admin' || u.role === 'gerente_ti');
+        const techs = usersData.filter(u => u.role === 'tecnico' || u.role === 'admin' || u.role === 'gerente_ti' || u.role === 'gerente_infra');
         setTechnicians(techs);
       }
     } catch (err: any) {
@@ -249,6 +251,7 @@ export const ServiceDeskPage: React.FC = () => {
         prioridade: newPriority,
         servico_id: Number(selectedDefinitionId),
         foto: newTicketAttachedPath || undefined,
+        tecnico_id: newAssignedTechId ? Number(newAssignedTechId) : undefined,
       });
 
       setTickets([ticket, ...tickets]);
@@ -257,6 +260,7 @@ export const ServiceDeskPage: React.FC = () => {
       setNewDescription('');
       setNewPriority('media');
       setSelectedDefinitionId('');
+      setNewAssignedTechId(isTechnician && currentUser ? currentUser.id : '');
       setNewTicketAttachedFile(null);
       setNewTicketAttachedPath('');
       setNewTicketUploading(false);
@@ -352,6 +356,11 @@ export const ServiceDeskPage: React.FC = () => {
       if (assignedTechId) {
         payload.tecnico_id = Number(assignedTechId);
         payload.responsavel_id = Number(assignedTechId);
+      } else if (status === 'em_atendimento' && isTechnician && currentUser) {
+        // Iniciar atendimento por um técnico também registra automaticamente o responsável.
+        payload.tecnico_id = currentUser.id;
+        payload.responsavel_id = currentUser.id;
+        setAssignedTechId(currentUser.id);
       }
 
       const updated = await serviceDeskApi.updateTicket(selectedTicket.id, payload);
@@ -410,8 +419,8 @@ export const ServiceDeskPage: React.FC = () => {
     try {
       const fullTicket = await serviceDeskApi.getTicketById(ticket.id);
       setSelectedTicket(fullTicket);
-      if (fullTicket.responsavel_id) {
-        setAssignedTechId(fullTicket.responsavel_id);
+      if (fullTicket.tecnico_id || fullTicket.responsavel_id) {
+        setAssignedTechId(fullTicket.tecnico_id || fullTicket.responsavel_id || '');
       } else {
         setAssignedTechId('');
       }
@@ -478,7 +487,10 @@ export const ServiceDeskPage: React.FC = () => {
               </button>
             )}
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setNewAssignedTechId(isTechnician && currentUser ? currentUser.id : '');
+                setShowCreateModal(true);
+              }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-brand-primary shadow-sm hover:bg-blue-50"
             >
               <Plus size={18} />
@@ -996,6 +1008,27 @@ export const ServiceDeskPage: React.FC = () => {
                   <option value="urgente">Urgente</option>
                 </select>
               </div>
+
+              {isTechnicianOrAbove && (
+                <div className="space-y-1 rounded-lg border border-brand-primary/20 bg-brand-primary/5 p-3">
+                  <label className="text-xs font-semibold text-brand-text">Responsável pelo atendimento</label>
+                  <select
+                    value={newAssignedTechId}
+                    onChange={(e) => setNewAssignedTechId(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text focus:outline-none focus:border-brand-primary"
+                  >
+                    <option value="">Definir depois</option>
+                    {technicians.map((technician) => (
+                      <option key={technician.id} value={technician.id}>
+                        {technician.id === currentUser?.id ? 'Assumir para mim — ' : ''}{technician.nome}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-brand-muted">
+                    {isTechnician ? 'Você pode assumir este chamado agora ou deixar a atribuição para depois.' : 'O chamado atribuído já será aberto como Em Atendimento.'}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2 border-t border-brand-border/30 pt-3">
                 <label className="text-xs text-brand-muted block">Anexo / Imagem (opcional)</label>
