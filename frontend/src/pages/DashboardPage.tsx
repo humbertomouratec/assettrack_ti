@@ -148,9 +148,9 @@ export const DashboardPage: React.FC = () => {
     try {
       setExtraLoading(true);
       const [sols, maints, ticketsData] = await Promise.all([
-        transactionApi.listSolicitacoes(),
-        maintenanceApi.listRequests(),
-        serviceDeskApi.listTickets()
+        transactionApi.listSolicitacoes({ my: true }),
+        maintenanceApi.listRequests({ my: true }),
+        serviceDeskApi.listTickets({ my: true })
       ]);
 
       const active = sols.filter(s => s.solicitante_id === user?.id && s.status?.toLowerCase() === 'entregue');

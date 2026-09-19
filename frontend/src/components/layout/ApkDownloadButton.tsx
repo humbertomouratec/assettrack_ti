@@ -9,7 +9,11 @@ interface ApkDownloadButtonProps {
   compact?: boolean;
 }
 
-export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className = '', variant = 'header', compact = false }) => {
+export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({
+  className = '',
+  variant = 'header',
+  compact = false,
+}) => {
   const [modalOpen, setModalOpen] = useState(false);
 
   if (variant === 'sidebar') {
@@ -18,18 +22,24 @@ export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className 
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className={`flex items-center w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded transition-all text-xs font-mono font-bold uppercase ${compact ? 'justify-center p-2.5' : 'space-x-2 p-2.5'} ${className}`}
-          title="Baixar Aplicativo Android (APK)"
+          title={compact ? `Baixar App Android (v${APP_CONFIG.CURRENT_VERSION_NAME})` : undefined}
           aria-label="Baixar Aplicativo Android (APK)"
+          className={`group flex w-full items-center rounded-xl border border-emerald-600/30 bg-emerald-50 hover:bg-emerald-100/90 text-emerald-950 transition-all duration-150 active:scale-[0.98] cursor-pointer shadow-2xs ${
+            compact ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
+          } ${className}`}
         >
-          <Smartphone size={16} />
-          {!compact && (
-            <>
-              <span>Baixar App Android</span>
-              <span className="ml-auto bg-emerald-500 text-brand-dark px-1.5 py-0.2 rounded text-[10px]">
-                v{APP_CONFIG.CURRENT_VERSION_NAME}
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <Smartphone size={18} className="shrink-0 text-emerald-700 group-hover:scale-110 transition-transform" />
+            {!compact && (
+              <span className="text-xs font-bold whitespace-nowrap text-emerald-950 tracking-tight">
+                App Android
               </span>
-            </>
+            )}
+          </div>
+          {!compact && (
+            <span className="shrink-0 rounded-md bg-emerald-600 text-white px-1.5 py-0.5 font-mono text-[10px] font-bold shadow-2xs">
+              v{APP_CONFIG.CURRENT_VERSION_NAME}
+            </span>
           )}
         </button>
         <ApkDownloadModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
@@ -42,19 +52,16 @@ export const ApkDownloadButton: React.FC<ApkDownloadButtonProps> = ({ className 
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        className={`inline-flex h-[38px] w-[183px] min-[1280px]:w-[228px] items-center justify-center space-x-1.5 overflow-visible bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-200 hover:text-white border border-emerald-400/40 rounded transition-all active:scale-95 shadow-sm text-xs font-semibold ${className}`}
-        title="Baixar Aplicativo Android (APK) para Celular e Coletores"
+        title="Baixar Aplicativo Android (APK)"
         aria-label="Download do APK Android"
+        className={`inline-flex h-8 items-center space-x-1.5 rounded-lg border border-emerald-600/30 bg-emerald-50 hover:bg-emerald-100/90 px-2.5 text-xs font-bold text-emerald-950 transition-all duration-150 active:scale-95 cursor-pointer shadow-2xs ${className}`}
       >
-        <img
-          src="/logoandroid.svg"
-          alt="Android"
-          className="h-[71px] w-[104px] shrink-0 object-contain"
-        />
-        <span className="bg-emerald-500 text-slate-900 text-[10px] font-mono font-black px-1.5 py-0.2 rounded shrink-0 shadow-sm">
+        <Smartphone size={15} className="shrink-0 text-emerald-700" />
+        <span className="whitespace-nowrap font-bold text-emerald-950">App Android</span>
+        <span className="rounded-md bg-emerald-600 text-white px-1.5 py-0.5 font-mono text-[10px] font-bold shadow-2xs">
           v{APP_CONFIG.CURRENT_VERSION_NAME}
         </span>
-        <Download size={13} className="hidden lg:inline text-emerald-300" />
+        <Download size={13} className="shrink-0 text-emerald-700" />
       </button>
       <ApkDownloadModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </>

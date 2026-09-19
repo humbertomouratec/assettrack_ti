@@ -43,6 +43,9 @@ export const BorrowingsPage: React.FC = () => {
 
   // Filter status state
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [borrowingSearchText, setBorrowingSearchText] = useState<string>('');
+  const [borrowingUserFilter, setBorrowingUserFilter] = useState<string>('');
+  const [borrowingCategoryFilter, setBorrowingCategoryFilter] = useState<string>('');
 
   // Create request modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -64,14 +67,27 @@ export const BorrowingsPage: React.FC = () => {
   const [maintAsset, setMaintAsset] = useState<Asset | null>(null);
   const [maintDescription, setMaintDescription] = useState('');
   const [maintSubmitting, setMaintSubmitting] = useState(false);
-
+  // System categories for filter
+  const [allCategoryNames, setAllCategoryNames] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSolicitacoes();
+    fetchCategories();
     if (showCreateModal) {
       fetchAssets();
     }
   }, [showCreateModal]);
+
+  const fetchCategories = async () => {
+    try {
+      const refs = await assetsApi.getReferences();
+      if (refs && refs.categorias) {
+        setAllCategoryNames(refs.categorias.map(c => c.nome).filter(Boolean));
+      }
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -296,18 +312,69 @@ export const BorrowingsPage: React.FC = () => {
     return <Cpu size={22} className="text-brand-primary" />;
   };
 
-  // Filter list
+  const visibleBorrowings = solicitacoes.filter((item) => isManagerOrAbove || item.solicitante_id === currentUser?.id);
+
+  // Dynamic user options for filter
+  const borrowingUsersList = Array.from(
+    new Map(
+      visibleBorrowings
+        .filter(s => s.solicitante && s.solicitante.nome)
+        .map(s => [s.solicitante!.id, s.solicitante!])
+    ).values()
+  ).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+  // Dynamic category options for filter (combining system categories + active borrowing asset categories)
+  const borrowingCategoriesList = Array.from(
+    new Set([
+      ...allCategoryNames,
+      ...visibleBorrowings
+        .map(s => s.asset?.categoria?.nome)
+        .filter((cat): cat is string => Boolean(cat))
+    ])
+  ).sort();
+
+  // Filter list with User, Category, Status, and Search text
   const filteredSolicitacoes = solicitacoes.filter(s => {
     if (!isManagerOrAbove && s.solicitante_id !== currentUser?.id) {
       return false;
     }
     const status = s.status?.toLowerCase() || '';
     if (!statusFilter && status === 'devolvida') return false;
-    if (statusFilter && s.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
+    if (statusFilter && status !== statusFilter.toLowerCase()) return false;
+
+    // Filter by specific user
+    if (borrowingUserFilter && String(s.solicitante_id) !== borrowingUserFilter) {
+      return false;
+    }
+
+    // Filter by category
+    if (borrowingCategoryFilter && s.asset?.categoria?.nome !== borrowingCategoryFilter) {
+      return false;
+    }
+
+    // Free text search
+    if (borrowingSearchText.trim()) {
+      const q = borrowingSearchText.toLowerCase().trim();
+      const userName = s.solicitante?.nome?.toLowerCase() || '';
+      const userEmail = s.solicitante?.email?.toLowerCase() || '';
+      const assetName = s.asset?.nome?.toLowerCase() || '';
+      const assetPatrimonio = s.asset?.e_patrimonio?.toLowerCase() || '';
+      const assetModel = s.asset?.modelo?.toLowerCase() || '';
+      const motiveText = s.motivo?.toLowerCase() || '';
+
+      const match = userName.includes(q) ||
+        userEmail.includes(q) ||
+        assetName.includes(q) ||
+        assetPatrimonio.includes(q) ||
+        assetModel.includes(q) ||
+        motiveText.includes(q);
+
+      if (!match) return false;
+    }
+
     return true;
   });
 
-  const visibleBorrowings = solicitacoes.filter((item) => isManagerOrAbove || item.solicitante_id === currentUser?.id);
   const borrowingMetrics = {
     pending: visibleBorrowings.filter((item) => item.status?.toLowerCase() === 'pendente').length,
     approved: visibleBorrowings.filter((item) => item.status?.toLowerCase() === 'aprovada').length,
@@ -364,13 +431,124 @@ export const BorrowingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <span className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary"><Filter size={14} /></span>
-          <div><div className="text-xs font-bold uppercase tracking-wide text-brand-text">Controle de fluxo</div><div className="mt-0.5 text-xs text-brand-muted">{filteredSolicitacoes.length} solicitação(ões) nesta visão</div></div>
+      {/* Filters Bar */}
+      <div className="space-y-3 rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
+              <Filter size={16} />
+            </span>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-brand-text">
+                Filtros & Controle de Fluxo
+              </div>
+              <div className="mt-0.5 text-xs text-brand-muted">
+                {filteredSolicitacoes.length} solicitação(ões) encontrada(s)
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {(statusFilter || borrowingSearchText || borrowingUserFilter || borrowingCategoryFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('');
+                  setBorrowingSearchText('');
+                  setBorrowingUserFilter('');
+                  setBorrowingCategoryFilter('');
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-2 rounded-xl transition-colors cursor-pointer"
+              >
+                <X size={14} />
+                <span>Limpar Filtros</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={fetchSolicitacoes}
+              className="rounded-xl border border-brand-border p-2 text-brand-muted hover:border-brand-primary hover:text-brand-primary transition-colors cursor-pointer"
+              title="Atualizar solicitações"
+              aria-label="Atualizar solicitações"
+            >
+              <RefreshCw size={16} />
+            </button>
+          </div>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto"><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-xl bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text focus:outline-none focus:border-brand-primary sm:w-auto"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="aprovada">Aprovada</option><option value="rejeitada">Rejeitada</option><option value="entregue">Entregue / Em Uso</option><option value="devolvida">Devolvida</option></select><button type="button" onClick={fetchSolicitacoes} className="rounded-xl border border-brand-border px-3 text-brand-muted hover:border-brand-primary hover:text-brand-primary" title="Atualizar solicitações" aria-label="Atualizar solicitações"><RefreshCw size={16} /></button></div>
+
+        {/* Filter Controls Row */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+          {/* Text Search Input */}
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-3 text-brand-muted pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Buscar colaborador, patrimônio..."
+              value={borrowingSearchText}
+              onChange={(e) => setBorrowingSearchText(e.target.value)}
+              className="w-full rounded-xl bg-brand-dark border border-brand-border pl-9 pr-8 py-2 text-xs text-brand-text placeholder:text-brand-muted focus:outline-none focus:border-brand-primary transition-colors"
+            />
+            {borrowingSearchText && (
+              <button
+                type="button"
+                onClick={() => setBorrowingSearchText('')}
+                className="absolute right-2.5 top-2.5 text-brand-muted hover:text-brand-text"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* User Filter Dropdown */}
+          {isManagerOrAbove && (
+            <div>
+              <select
+                value={borrowingUserFilter}
+                onChange={(e) => setBorrowingUserFilter(e.target.value)}
+                className="w-full rounded-xl bg-brand-dark border border-brand-border px-3 py-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary transition-colors cursor-pointer"
+              >
+                <option value="">Todos os usuários</option>
+                {borrowingUsersList.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome} {u.cargo ? `(${u.cargo})` : `(${u.email})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Category Filter Dropdown */}
+          <div>
+            <select
+              value={borrowingCategoryFilter}
+              onChange={(e) => setBorrowingCategoryFilter(e.target.value)}
+              className="w-full rounded-xl bg-brand-dark border border-brand-border px-3 py-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary transition-colors cursor-pointer"
+            >
+              <option value="">Todas as categorias</option>
+              {borrowingCategoriesList.map(cat => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full rounded-xl bg-brand-dark border border-brand-border px-3 py-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary transition-colors cursor-pointer"
+            >
+              <option value="">Status (Exceto Devolvidas)</option>
+              <option value="pendente">Pendente</option>
+              <option value="aprovada">Aprovada</option>
+              <option value="rejeitada">Rejeitada</option>
+              <option value="entregue">Entregue / Em Uso</option>
+              <option value="devolvida">Devolvida (Histórico)</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* List */}

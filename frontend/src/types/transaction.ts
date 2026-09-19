@@ -7,6 +7,7 @@ export interface Solicitacao {
     id: number;
     nome: string;
     email: string;
+    cargo?: string;
   };
   asset_id?: number;
   asset?: Asset;

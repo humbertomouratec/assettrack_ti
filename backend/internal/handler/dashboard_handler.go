@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,19 +11,34 @@ import (
 	"github.com/assettrack/backend/internal/middleware"
 	"github.com/assettrack/backend/internal/models"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type DashboardHandler struct {
-	db *gorm.DB
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
-func NewDashboardHandler(db *gorm.DB) *DashboardHandler {
-	return &DashboardHandler{db: db}
+func NewDashboardHandler(db *gorm.DB, rdb *redis.Client) *DashboardHandler {
+	return &DashboardHandler{db: db, rdb: rdb}
 }
 
 // GetStats GET /api/v1/dashboard/stats
 func (h *DashboardHandler) GetStats(c *gin.Context) {
+	cacheKey := "dashboard:stats"
+
+	if h.rdb != nil {
+		if cachedBytes, err := h.rdb.Get(c.Request.Context(), cacheKey).Bytes(); err == nil && len(cachedBytes) > 0 {
+			var cachedResp dto.DashboardStatsResponse
+			if jsonErr := json.Unmarshal(cachedBytes, &cachedResp); jsonErr == nil {
+				c.Header("X-Cache", "HIT")
+				c.JSON(http.StatusOK, cachedResp)
+				return
+			}
+		}
+	}
+
 	var response dto.DashboardStatsResponse
 
 	// 1. Total Assets & Assets count by Status
@@ -253,6 +269,13 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 		}
 	}
 
+	if h.rdb != nil {
+		if jsonBytes, err := json.Marshal(response); err == nil {
+			_ = h.rdb.Set(c.Request.Context(), cacheKey, jsonBytes, 30*time.Second).Err()
+		}
+	}
+
+	c.Header("X-Cache", "MISS")
 	c.JSON(http.StatusOK, response)
 }
 

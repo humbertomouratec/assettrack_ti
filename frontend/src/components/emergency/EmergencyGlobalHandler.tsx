@@ -41,8 +41,9 @@ export const EmergencyGlobalHandler: React.FC = () => {
   const [liveAlert, setLiveAlert] = useState<EmergencyPayload | null>(null);
   const [acknowledgingAlert, setAcknowledgingAlert] = useState(false);
   
-  // Track dismissed alert IDs during current session
+  // Track dismissed alert IDs and SSE connection health
   const dismissedAlertIdsRef = useRef<Set<number>>(new Set());
+  const sseConnectedRef = useRef<boolean>(false);
 
   // Listen for global custom trigger events
   useEffect(() => {
@@ -87,7 +88,12 @@ export const EmergencyGlobalHandler: React.FC = () => {
         const streamUrl = `${API_BASE_URL}/alertas/stream?token=${encodeURIComponent(token)}`;
         evtSource = new EventSource(streamUrl);
 
+        evtSource.onopen = () => {
+          sseConnectedRef.current = true;
+        };
+
         evtSource.addEventListener('emergency_alert', (event: MessageEvent) => {
+          sseConnectedRef.current = true;
           try {
             const data: EmergencyPayload = JSON.parse(event.data);
             if (!dismissedAlertIdsRef.current.has(data.id)) {
@@ -101,10 +107,12 @@ export const EmergencyGlobalHandler: React.FC = () => {
         });
 
         evtSource.onerror = () => {
+          sseConnectedRef.current = false;
           if (evtSource) evtSource.close();
-          reconnectTimeout = setTimeout(connectSSE, 5000);
+          reconnectTimeout = setTimeout(connectSSE, 10000);
         };
       } catch (e) {
+        sseConnectedRef.current = false;
         console.error('[EMERGENCY_SSE] Error initializing EventSource:', e);
       }
     };
@@ -112,16 +120,19 @@ export const EmergencyGlobalHandler: React.FC = () => {
     connectSSE();
 
     return () => {
+      sseConnectedRef.current = false;
       if (evtSource) evtSource.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, [isStaff, token]);
 
-  // 2. Polling Fallback (Backup check every 4s to ensure 100% alert delivery)
+  // 2. Polling Fallback (Backup check every 30s only when SSE stream is disconnected)
   useEffect(() => {
     if (!isStaff) return;
 
     const checkPendingAlerts = async () => {
+      if (sseConnectedRef.current) return; // Skip polling when primary SSE stream is healthy
+
       try {
         const history = await alertsApi.history();
         const pending = history.filter(a => !a.atendido && !a.ciente && !dismissedAlertIdsRef.current.has(a.id));
@@ -149,8 +160,7 @@ export const EmergencyGlobalHandler: React.FC = () => {
       }
     };
 
-    checkPendingAlerts();
-    const interval = setInterval(checkPendingAlerts, 4000);
+    const interval = setInterval(checkPendingAlerts, 30000);
     return () => clearInterval(interval);
   }, [isStaff]);
 

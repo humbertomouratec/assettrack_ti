@@ -2,9 +2,21 @@ import { apiClient } from './client';
 import type { SolicitacaoManutencao } from '../types';
 
 export const maintenanceApi = {
-  // Requests
-  listRequests: async (skip = 0, limit = 100): Promise<SolicitacaoManutencao[]> => {
-    const response = await apiClient.get<SolicitacaoManutencao[]>(`/solicitacoes-manutencao?skip=${skip}&limit=${limit}`);
+  listRequests: async (options?: { skip?: number; limit?: number; my?: boolean } | number, limitParam = 100): Promise<SolicitacaoManutencao[]> => {
+    let skip = 0;
+    let limit = limitParam;
+    let myFilter = false;
+
+    if (typeof options === 'object' && options !== null) {
+      skip = options.skip ?? 0;
+      limit = options.limit ?? 100;
+      myFilter = !!options.my;
+    } else if (typeof options === 'number') {
+      skip = options;
+    }
+
+    const myQuery = myFilter ? '&my=true' : '';
+    const response = await apiClient.get<SolicitacaoManutencao[]>(`/solicitacoes-manutencao?skip=${skip}&limit=${limit}${myQuery}`);
     return response.data;
   },
   getRequestById: async (id: number): Promise<SolicitacaoManutencao> => {

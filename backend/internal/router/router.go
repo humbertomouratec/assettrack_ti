@@ -115,7 +115,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	rhHandler := handler.NewRHHandler(rhRepo, userRepo, assetRepo, alertRepo, alertBroker, emailSvc)
 	webhookHandler := handler.NewWebhookHandler(webhookRepo, webhookDispatcher)
 	backupHandler := handler.NewBackupHandler(cfg)
-	dashboardHandler := handler.NewDashboardHandler(db)
+	dashboardHandler := handler.NewDashboardHandler(db, rdb)
 	settingsHandler := handler.NewSettingsHandler(systemSettingsRepo, emailSvc)
 	emailLogHandler := handler.NewEmailLogHandler(emailLogRepo)
 	aiHandler := handler.NewAIHandler(aiSvc)

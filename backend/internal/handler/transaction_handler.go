@@ -34,8 +34,14 @@ func canProcessBorrowingReturn(role string) bool {
 func (h *TransactionHandler) ListSolicitacoes(c *gin.Context) {
 	skip, _ := strconv.Atoi(c.DefaultQuery("skip", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	user := middleware.GetCurrentUser(c)
 
-	sols, err := h.repo.ListSolicitacoes(skip, limit)
+	var filterUser *uint
+	if c.Query("my") == "true" && user != nil {
+		filterUser = &user.ID
+	}
+
+	sols, err := h.repo.ListSolicitacoes(filterUser, skip, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

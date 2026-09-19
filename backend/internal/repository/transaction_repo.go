@@ -34,15 +34,22 @@ func (r *TransactionRepository) CreateMovement(mov *models.Movimentacao) error {
 }
 
 // Solicitacao methods
-func (r *TransactionRepository) ListSolicitacoes(skip, limit int) ([]models.Solicitacao, error) {
+func (r *TransactionRepository) ListSolicitacoes(userID *uint, skip, limit int) ([]models.Solicitacao, error) {
 	var sols []models.Solicitacao
-	err := r.db.Preload("Solicitante").
+	query := r.db.Model(&models.Solicitacao{}).
+		Preload("Solicitante").
 		Preload("Aprovador").
 		Preload("Confirmador").
 		Preload("Recebedor").
 		Preload("Asset").
-		Preload("Termo").
-		Order("data_solicitacao desc").
+		Preload("Asset.Categoria").
+		Preload("Termo")
+
+	if userID != nil {
+		query = query.Where("solicitante_id = ?", *userID)
+	}
+
+	err := query.Order("data_solicitacao desc").
 		Offset(skip).
 		Limit(limit).
 		Find(&sols).Error
@@ -56,6 +63,7 @@ func (r *TransactionRepository) GetSolicitacaoByID(id uint) (*models.Solicitacao
 		Preload("Confirmador").
 		Preload("Recebedor").
 		Preload("Asset").
+		Preload("Asset.Categoria").
 		Preload("Termo").
 		First(&sol, id).Error
 	if err != nil {

@@ -16,17 +16,23 @@ func NewMaintenanceRepository(db *gorm.DB) *MaintenanceRepository {
 }
 
 // SolicitacaoManutencao methods
-func (r *MaintenanceRepository) ListRequests(skip, limit int) ([]models.SolicitacaoManutencao, error) {
+func (r *MaintenanceRepository) ListRequests(userID *uint, skip, limit int) ([]models.SolicitacaoManutencao, error) {
 	var reqs []models.SolicitacaoManutencao
-	err := r.db.Preload("Solicitante").
+	query := r.db.Model(&models.SolicitacaoManutencao{}).
+		Preload("Solicitante").
 		Preload("Responsavel").
 		Preload("Asset").
 		Preload("Asset.CurrentLocal").
 		Preload("Asset.CurrentArmazenamento").
 		Preload("Asset.PrevLocal").
 		Preload("Asset.PrevArmazenamento").
-		Preload("Manutencao").
-		Order("data_solicitacao desc").
+		Preload("Manutencao")
+
+	if userID != nil {
+		query = query.Where("solicitante_id = ?", *userID)
+	}
+
+	err := query.Order("data_solicitacao desc").
 		Offset(skip).
 		Limit(limit).
 		Find(&reqs).Error

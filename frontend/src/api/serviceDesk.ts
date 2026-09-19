@@ -22,9 +22,21 @@ export const serviceDeskApi = {
     return response.data;
   },
 
-  // Tickets
-  listTickets: async (skip = 0, limit = 100): Promise<ServiceTicket[]> => {
-    const response = await apiClient.get<ServiceTicket[]>(`/servicos/chamados?skip=${skip}&limit=${limit}`);
+  listTickets: async (options?: { skip?: number; limit?: number; my?: boolean } | number, limitParam = 100): Promise<ServiceTicket[]> => {
+    let skip = 0;
+    let limit = limitParam;
+    let myFilter = false;
+
+    if (typeof options === 'object' && options !== null) {
+      skip = options.skip ?? 0;
+      limit = options.limit ?? 100;
+      myFilter = !!options.my;
+    } else if (typeof options === 'number') {
+      skip = options;
+    }
+
+    const myQuery = myFilter ? '&my=true' : '';
+    const response = await apiClient.get<ServiceTicket[]>(`/servicos/chamados?skip=${skip}&limit=${limit}${myQuery}`);
     return response.data;
   },
   getTicketById: async (id: number): Promise<ServiceTicket> => {

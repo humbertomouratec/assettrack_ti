@@ -132,7 +132,7 @@ func (h *ServiceDeskHandler) ListTickets(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 
 	var filterUser *uint
-	if !isStaff(user.Role) {
+	if !isStaff(user.Role) || c.Query("my") == "true" {
 		filterUser = &user.ID
 	}
 

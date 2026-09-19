@@ -229,7 +229,7 @@ func (h *QRHandler) GetUserByQR(c *gin.Context) {
 
 	// Fetch pending deliveries for the scanned user
 	var pendingDeliveries []dto.PendingDeliveryItem
-	sols, _ := h.txRepo.ListSolicitacoes(0, 1000)
+	sols, _ := h.txRepo.ListSolicitacoes(&user.ID, 0, 1000)
 	for _, s := range sols {
 		if s.SolicitanteID != nil && *s.SolicitanteID == user.ID && s.Status == models.StatusSolicitacaoAprovada {
 			assetTag := ""
@@ -249,7 +249,7 @@ func (h *QRHandler) GetUserByQR(c *gin.Context) {
 		}
 	}
 
-	reqs, _ := h.maintRepo.ListRequests(0, 1000)
+	reqs, _ := h.maintRepo.ListRequests(&user.ID, 0, 1000)
 	for _, r := range reqs {
 		if r.SolicitanteID != nil && *r.SolicitanteID == user.ID && r.Status == models.StatusMaintAguardandoEntrega {
 			assetTag := ""
@@ -417,7 +417,7 @@ func (h *QRHandler) DeliveryConfirm(c *gin.Context) {
 	if req.ManutencaoID != nil {
 		// Delivery confirm for maintenance request (returns asset to user)
 		var reqMaint *models.SolicitacaoManutencao
-		reqs, _ := h.maintRepo.ListRequests(0, 1000)
+		reqs, _ := h.maintRepo.ListRequests(nil, 0, 1000)
 		for i := range reqs {
 			if reqs[i].ManutencaoID != nil && *reqs[i].ManutencaoID == *req.ManutencaoID {
 				reqMaint = &reqs[i]

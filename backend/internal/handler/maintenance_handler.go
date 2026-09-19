@@ -32,8 +32,14 @@ func NewMaintenanceHandler(
 func (h *MaintenanceHandler) ListRequests(c *gin.Context) {
 	skip, _ := strconv.Atoi(c.DefaultQuery("skip", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	user := middleware.GetCurrentUser(c)
 
-	reqs, err := h.repo.ListRequests(skip, limit)
+	var filterUser *uint
+	if c.Query("my") == "true" && user != nil {
+		filterUser = &user.ID
+	}
+
+	reqs, err := h.repo.ListRequests(filterUser, skip, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

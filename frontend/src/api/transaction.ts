@@ -2,9 +2,21 @@ import { apiClient } from './client';
 import type { Asset, Solicitacao } from '../types';
 
 export const transactionApi = {
-  // Borrowings
-  listSolicitacoes: async (skip = 0, limit = 100): Promise<Solicitacao[]> => {
-    const response = await apiClient.get<Solicitacao[]>(`/solicitacoes?skip=${skip}&limit=${limit}`);
+  listSolicitacoes: async (options?: { skip?: number; limit?: number; my?: boolean } | number, limitParam = 100): Promise<Solicitacao[]> => {
+    let skip = 0;
+    let limit = limitParam;
+    let myFilter = false;
+
+    if (typeof options === 'object' && options !== null) {
+      skip = options.skip ?? 0;
+      limit = options.limit ?? 100;
+      myFilter = !!options.my;
+    } else if (typeof options === 'number') {
+      skip = options;
+    }
+
+    const myQuery = myFilter ? '&my=true' : '';
+    const response = await apiClient.get<Solicitacao[]>(`/solicitacoes?skip=${skip}&limit=${limit}${myQuery}`);
     return response.data;
   },
   createSolicitacao: async (data: { asset_id: number; motivo: string; data_prevista_devolucao?: string }): Promise<Solicitacao> => {
