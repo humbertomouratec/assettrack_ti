@@ -187,6 +187,25 @@ O APK Android não é mais gerado pela aplicação nem pelos scripts de instala�
 ./scripts/publish_mobile_apk.sh /caminho/AssetTrack-TI.apk
 ```
 
+### 🛠️ Solução de Problemas (Troubleshooting)
+
+#### Erro de falta de espaço em disco no Docker / APT (`exit code: 100` ou `Need to get ... MB of archives`)
+
+* **Sintoma:** Durante a execução do `init_docker.sh` ou `docker compose build`, a etapa do `apt-get install` no backend falha com código de erro `100` ou mensagem de falta de espaço livre em `/var/cache/apt/archives/`.
+* **Causa:** Acúmulo de imagens antigas, camadas e cache de compilação do Docker na VM, somado a pacotes pesados desnecessários na imagem base.
+* **Resolução:**
+  1. O `backend/Dockerfile` foi otimizado (remoção da dependência desnecessária `default-jdk-headless`), reduzindo a imagem em mais de **400 MB**.
+  2. Execute a limpeza profunda do cache do Docker na VM para liberar espaço:
+     ```bash
+     docker system prune -af --volumes
+     docker builder prune -a
+     ```
+  3. Baixe a versão atualizada e execute a inicialização:
+     ```bash
+     git pull origin main
+     ./init_docker.sh
+     ```
+
 ### Deploy no EasyPanel
 
 Para publicar por Git no EasyPanel sem alterar o modo local, use o arquivo
