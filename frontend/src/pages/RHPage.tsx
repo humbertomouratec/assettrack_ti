@@ -787,6 +787,11 @@ export const RHPage: React.FC = () => {
             </form>
           </div>
 
+          <div className="space-y-3">
+            <div className="flex justify-end items-center gap-2"><label className="text-xs font-mono uppercase text-brand-muted">Filtrar calendário por setor</label><select value={calendarSector} onChange={e => setCalendarSector(e.target.value)} className="bg-brand-dark border border-brand-border px-3 py-2 text-xs text-brand-text"><option value="">Todos os setores</option>{Array.from(new Map(control.colaboradores.filter(c => c.usuario.departamento).map(c => [c.usuario.departamento_id, c.usuario.departamento!.nome])).entries()).map(([id, name]) => <option key={String(id)} value={String(id)}>{name}</option>)}</select></div>
+            <RHMonthlyCalendar records={control.status} sectorId={calendarSector} />
+          </div>
+
           <div className="border border-brand-border bg-brand-card">
             <div className="p-4 border-b border-brand-border flex items-center gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><UsersRound size={16} className="text-brand-primary" /> Status atual da equipe <span className="ml-auto text-[10px] normal-case text-brand-muted font-normal">atualiza automaticamente</span></div>
             <div className="divide-y divide-brand-border/60 max-h-[340px] overflow-y-auto">
@@ -819,11 +824,6 @@ export const RHPage: React.FC = () => {
               })}
               {control.colaboradores.length === 0 && <div className="p-6 text-center text-sm text-brand-muted">Nenhum subordinado configurado para sua equipe.</div>}
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-end items-center gap-2"><label className="text-xs font-mono uppercase text-brand-muted">Filtrar calendário por setor</label><select value={calendarSector} onChange={e => setCalendarSector(e.target.value)} className="bg-brand-dark border border-brand-border px-3 py-2 text-xs text-brand-text"><option value="">Todos os setores</option>{Array.from(new Map(control.colaboradores.filter(c => c.usuario.departamento).map(c => [c.usuario.departamento_id, c.usuario.departamento!.nome])).entries()).map(([id, name]) => <option key={String(id)} value={String(id)}>{name}</option>)}</select></div>
-            <RHMonthlyCalendar records={control.status} sectorId={calendarSector} />
           </div>
 
           {(control.status.length > 0 || control.comunicados.length > 0) && <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
