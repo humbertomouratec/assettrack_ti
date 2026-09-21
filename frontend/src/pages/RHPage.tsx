@@ -92,6 +92,7 @@ export const RHPage: React.FC = () => {
   const [solId, setSolId] = useState<number | null>(null);
   const [conteudo, setConteudo] = useState('');
   const [saving, setSaving] = useState(false);
+  const [control, setControl] = useState<RHControlResponse | null>(null);
   const [statusForm, setStatusForm] = useState({ usuario_id: '', tipo: 'folga', inicio: dateInputValue(), fim: '', horas: '', observacao: '' });
   const [statusSector, setStatusSector] = useState('');
   const [statusUserSearch, setStatusUserSearch] = useState('');
