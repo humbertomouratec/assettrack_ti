@@ -4,7 +4,7 @@ import { apiClient as api, toApiFileUrl } from '../api/client';
 import type { TermoResponsabilidade, RHControlResponse, RHStatusType, RHStatusRecord } from '../types/rh';
 import type { Solicitacao } from '../types/transaction';
 import type { User } from '../types/user';
-import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network } from 'lucide-react';
+import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network, X, Filter } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -92,8 +92,12 @@ export const RHPage: React.FC = () => {
   const [solId, setSolId] = useState<number | null>(null);
   const [conteudo, setConteudo] = useState('');
   const [saving, setSaving] = useState(false);
-  const [control, setControl] = useState<RHControlResponse | null>(null);
   const [statusForm, setStatusForm] = useState({ usuario_id: '', tipo: 'folga', inicio: dateInputValue(), fim: '', horas: '', observacao: '' });
+  const [statusSector, setStatusSector] = useState('');
+  const [statusUserSearch, setStatusUserSearch] = useState('');
+  const [statusDateMode, setStatusDateMode] = useState<'range' | 'multiple'>('range');
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [newDateInput, setNewDateInput] = useState(dateInputValue());
   const [noticeForm, setNoticeForm] = useState({ usuario_id: '', titulo: '', mensagem: '', inicio: dateInputValue(), fim: '' });
   const [calendarSector, setCalendarSector] = useState('');
   const [exportSector, setExportSector] = useState('');
@@ -104,6 +108,34 @@ export const RHPage: React.FC = () => {
   const [hierarchyManager, setHierarchyManager] = useState('');
   const [hierarchySearch, setHierarchySearch] = useState('');
   const [hierarchyMembers, setHierarchyMembers] = useState<number[]>([]);
+
+  const statusSectorOptions = useMemo(() => {
+    const sectors = new Map<string, string>();
+    control?.colaboradores.forEach(({ usuario }) => {
+      if (usuario.departamento) {
+        sectors.set(String(usuario.departamento_id), usuario.departamento.nome);
+      }
+    });
+    return Array.from(sectors.entries()).map(([id, name]) => ({ id, name }));
+  }, [control]);
+
+  const statusFilteredCollaborators = useMemo(() => {
+    if (!control) return [];
+    return control.colaboradores.filter(c => {
+      if (!c.usuario.is_active) return false;
+      if (statusSector && String(c.usuario.departamento_id ?? '') !== statusSector) return false;
+      if (statusUserSearch.trim()) {
+        const query = statusUserSearch.toLowerCase();
+        const name = (c.usuario.nome || '').toLowerCase();
+        const email = (c.usuario.email || '').toLowerCase();
+        const matricula = (c.usuario.matricula || '').toLowerCase();
+        const cargo = (c.usuario.cargo || '').toLowerCase();
+        const dept = (c.usuario.departamento?.nome || '').toLowerCase();
+        return name.includes(query) || email.includes(query) || matricula.includes(query) || cargo.includes(query) || dept.includes(query);
+      }
+      return true;
+    });
+  }, [control, statusSector, statusUserSearch]);
 
   const fetchData = async () => {
     try {
@@ -162,16 +194,46 @@ export const RHPage: React.FC = () => {
 
   const saveStatus = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!statusForm.usuario_id) return;
+    if (!statusForm.usuario_id) {
+      alert('Selecione um colaborador.');
+      return;
+    }
     try {
-      await rhApi.createStatus({
-        usuario_id: Number(statusForm.usuario_id), tipo: statusForm.tipo, inicio: statusForm.inicio,
-        fim: statusForm.fim || undefined, horas: statusForm.horas ? Number(statusForm.horas) : undefined,
-        observacao: statusForm.observacao || undefined,
-      });
-      setStatusForm({ usuario_id: '', tipo: 'folga', inicio: dateInputValue(), fim: '', horas: '', observacao: '' });
+      if (statusDateMode === 'multiple') {
+        if (selectedDates.length === 0) {
+          alert('Selecione pelo menos uma data para registrar o status.');
+          return;
+        }
+        const promises = selectedDates.map(date =>
+          rhApi.createStatus({
+            usuario_id: Number(statusForm.usuario_id),
+            tipo: statusForm.tipo,
+            inicio: date,
+            fim: date,
+            horas: statusForm.horas ? Number(statusForm.horas) : undefined,
+            observacao: statusForm.observacao || undefined,
+          })
+        );
+        await Promise.all(promises);
+        setStatusForm({ usuario_id: '', tipo: 'folga', inicio: dateInputValue(), fim: '', horas: '', observacao: '' });
+        setSelectedDates([]);
+        alert(`${selectedDates.length} datas registradas no calendário com sucesso!`);
+      } else {
+        await rhApi.createStatus({
+          usuario_id: Number(statusForm.usuario_id),
+          tipo: statusForm.tipo,
+          inicio: statusForm.inicio,
+          fim: statusForm.fim || undefined,
+          horas: statusForm.horas ? Number(statusForm.horas) : undefined,
+          observacao: statusForm.observacao || undefined,
+        });
+        setStatusForm({ usuario_id: '', tipo: 'folga', inicio: dateInputValue(), fim: '', horas: '', observacao: '' });
+        alert('Status registrado no calendário com sucesso!');
+      }
       await fetchData();
-    } catch (err: any) { alert(err.response?.data?.error || 'Não foi possível registrar o status.'); }
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Não foi possível registrar o status.');
+    }
   };
 
   const saveNotice = async (e: React.FormEvent) => {
@@ -468,21 +530,248 @@ export const RHPage: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <form onSubmit={saveStatus} className="border border-brand-border bg-brand-card p-5 space-y-4">
-              <div className="flex items-start gap-3"><div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary"><ClipboardPlus size={18} /></div><div><div className="text-base font-bold text-brand-text">Registrar status</div><p className="mt-0.5 text-xs text-brand-muted">{isRHAdmin ? 'Inclua uma mudança de agenda no calendário do colaborador.' : 'Controle folgas, férias e banco de horas somente da sua equipe configurada.'}</p></div></div>
-              <select required value={statusForm.usuario_id} onChange={e => setStatusForm({ ...statusForm, usuario_id: e.target.value })} className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text">
-                <option value="">Selecione o colaborador</option>
-                {control.colaboradores.filter(c => c.usuario.is_active).map(c => <option key={c.usuario.id} value={c.usuario.id}>{c.usuario.nome}</option>)}
-              </select>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <select value={statusForm.tipo} onChange={e => setStatusForm({ ...statusForm, tipo: e.target.value })} className="bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text">
-                  <option value="trabalhando">Trabalhando</option><option value="folga">Folga</option><option value="ferias">Férias</option><option value="banco_horas">Banco de horas</option>
-                </select>
-                <input required type="date" value={statusForm.inicio} onChange={e => setStatusForm({ ...statusForm, inicio: e.target.value })} className="bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" />
-                <input type="date" value={statusForm.fim} onChange={e => setStatusForm({ ...statusForm, fim: e.target.value })} className="bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" title="Fim (opcional)" />
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
+                  <ClipboardPlus size={18} />
+                </div>
+                <div>
+                  <div className="text-base font-bold text-brand-text">Registrar status</div>
+                  <p className="mt-0.5 text-xs text-brand-muted">
+                    {isRHAdmin ? 'Inclua uma mudança de agenda no calendário do colaborador.' : 'Controle folgas, férias e banco de horas somente da sua equipe configurada.'}
+                  </p>
+                </div>
               </div>
-              {statusForm.tipo === 'banco_horas' && <input type="number" step="0.5" placeholder="Quantidade de horas" value={statusForm.horas} onChange={e => setStatusForm({ ...statusForm, horas: e.target.value })} className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" />}
-              <input placeholder="Observação para o histórico (opcional)" value={statusForm.observacao} onChange={e => setStatusForm({ ...statusForm, observacao: e.target.value })} className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" />
-              <button className="bg-brand-primary text-brand-dark font-bold font-mono px-4 py-2.5 uppercase tracking-wider text-xs">Salvar no calendário</button>
+
+              {/* Filtros: Setor e Busca por texto */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-brand-dark/30 border border-brand-border/60 rounded-lg">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1 flex items-center gap-1">
+                    <Filter size={12} /> Filtrar por setor
+                  </label>
+                  <select
+                    value={statusSector}
+                    onChange={e => setStatusSector(e.target.value)}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-1.5 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                  >
+                    <option value="">Todos os setores ({control.colaboradores.filter(c => c.usuario.is_active).length})</option>
+                    {statusSectorOptions.map(sector => (
+                      <option key={sector.id} value={sector.id}>{sector.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1 flex items-center gap-1">
+                    <Search size={12} /> Buscar colaborador
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Nome, matrícula, cargo..."
+                      value={statusUserSearch}
+                      onChange={e => setStatusUserSearch(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border py-1.5 pl-3 pr-7 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    />
+                    {statusUserSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setStatusUserSearch('')}
+                        className="absolute right-2 top-2 text-brand-muted hover:text-brand-text"
+                        title="Limpar busca"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Seleção do colaborador */}
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                  Colaborador <span className="text-red-400">*</span>
+                  <span className="ml-1 text-[10px] text-brand-muted">
+                    ({statusFilteredCollaborators.length} {statusFilteredCollaborators.length === 1 ? 'disponível' : 'disponíveis'})
+                  </span>
+                </label>
+                <select
+                  required
+                  value={statusForm.usuario_id}
+                  onChange={e => setStatusForm({ ...statusForm, usuario_id: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                >
+                  <option value="">Selecione o colaborador...</option>
+                  {statusFilteredCollaborators.map(c => (
+                    <option key={c.usuario.id} value={c.usuario.id}>
+                      {c.usuario.nome} {c.usuario.departamento?.nome ? `— ${c.usuario.departamento.nome}` : ''} {c.usuario.matricula ? `[Matrícula: ${c.usuario.matricula}]` : ''}
+                    </option>
+                  ))}
+                </select>
+                {statusFilteredCollaborators.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-500/90 font-mono m-0">Nenhum colaborador encontrado com os filtros aplicados.</p>
+                )}
+              </div>
+
+              {/* Tipo de status e Modo de data */}
+              <div className="space-y-3 border-t border-brand-border pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono uppercase text-brand-muted">Modo de seleção de datas:</span>
+                  <div className="flex items-center gap-1.5 bg-brand-dark/50 p-1 border border-brand-border rounded">
+                    <button
+                      type="button"
+                      onClick={() => setStatusDateMode('range')}
+                      className={`px-2.5 py-1 text-[11px] font-mono uppercase rounded transition-colors ${statusDateMode === 'range' ? 'bg-brand-primary text-brand-dark font-bold' : 'text-brand-muted hover:text-brand-text'}`}
+                    >
+                      Período (De / Até)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusDateMode('multiple')}
+                      className={`px-2.5 py-1 text-[11px] font-mono uppercase rounded transition-colors ${statusDateMode === 'multiple' ? 'bg-brand-primary text-brand-dark font-bold' : 'text-brand-muted hover:text-brand-text'}`}
+                    >
+                      Múltiplas datas
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Status</label>
+                    <select
+                      value={statusForm.tipo}
+                      onChange={e => setStatusForm({ ...statusForm, tipo: e.target.value })}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                    >
+                      <option value="trabalhando">Trabalhando</option>
+                      <option value="folga">Folga</option>
+                      <option value="ferias">Férias</option>
+                      <option value="banco_horas">Banco de horas</option>
+                    </select>
+                  </div>
+
+                  {statusDateMode === 'range' ? (
+                    <>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Início <span className="text-red-400">*</span></label>
+                        <input
+                          required
+                          type="date"
+                          value={statusForm.inicio}
+                          onChange={e => setStatusForm({ ...statusForm, inicio: e.target.value })}
+                          className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Fim (opcional)</label>
+                        <input
+                          type="date"
+                          value={statusForm.fim}
+                          onChange={e => setStatusForm({ ...statusForm, fim: e.target.value })}
+                          className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                          title="Fim (opcional)"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Escolher data avulsa</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={newDateInput}
+                          onChange={e => setNewDateInput(e.target.value)}
+                          className="flex-1 bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newDateInput && !selectedDates.includes(newDateInput)) {
+                              setSelectedDates([...selectedDates, newDateInput].sort());
+                            }
+                          }}
+                          className="bg-brand-primary text-brand-dark font-bold font-mono px-3 py-2 text-xs uppercase tracking-wider rounded hover:bg-brand-primary/90 shrink-0"
+                        >
+                          + Incluir dia
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Exibição das múltiplas datas selecionadas */}
+                {statusDateMode === 'multiple' && (
+                  <div className="p-3 bg-brand-dark/40 border border-brand-border/70 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono uppercase text-brand-muted">
+                        Datas selecionadas ({selectedDates.length}):
+                      </span>
+                      {selectedDates.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDates([])}
+                          className="text-[11px] text-red-400 hover:underline"
+                        >
+                          Limpar todas
+                        </button>
+                      )}
+                    </div>
+                    {selectedDates.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                        {selectedDates.map(date => (
+                          <span
+                            key={date}
+                            className="inline-flex items-center gap-1.5 bg-brand-primary/15 border border-brand-primary/40 text-brand-primary px-2.5 py-1 text-xs font-mono font-semibold rounded"
+                          >
+                            <CalendarDays size={12} />
+                            {new Date(`${date}T00:00:00`).toLocaleDateString('pt-BR')}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDates(selectedDates.filter(d => d !== date))}
+                              className="text-brand-primary/70 hover:text-red-400 ml-0.5"
+                              title="Remover data"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-500/90 font-mono m-0">
+                        Escolha uma data no campo acima e clique em "+ Incluir dia" para adicionar cada data individualmente.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {statusForm.tipo === 'banco_horas' && (
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Quantidade de horas</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="Quantidade de horas (ex: 4 ou 8)"
+                      value={statusForm.horas}
+                      onChange={e => setStatusForm({ ...statusForm, horas: e.target.value })}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Observação para o histórico (opcional)</label>
+                  <input
+                    placeholder="Observação para o histórico (opcional)"
+                    value={statusForm.observacao}
+                    onChange={e => setStatusForm({ ...statusForm, observacao: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                  />
+                </div>
+              </div>
+
+              <button className="bg-brand-primary text-brand-dark font-bold font-mono px-4 py-2.5 uppercase tracking-wider text-xs rounded hover:bg-brand-primary/90">
+                {statusDateMode === 'multiple' && selectedDates.length > 0
+                  ? `Salvar ${selectedDates.length} data${selectedDates.length > 1 ? 's' : ''} no calendário`
+                  : 'Salvar no calendário'}
+              </button>
             </form>
 
             <form onSubmit={saveNotice} className="border border-brand-border bg-brand-card p-5 space-y-4">
