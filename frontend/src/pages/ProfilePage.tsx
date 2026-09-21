@@ -230,6 +230,10 @@ export const ProfilePage: React.FC = () => {
     .filter(item => item.tipo === 'banco_horas' && typeof item.horas === 'number')
     .reduce((total, item) => total + Number(item.horas || 0), 0);
 
+  const pendingComunicados = useMemo(() => {
+    return (rhPortal?.comunicados || []).filter(item => !item.lida);
+  }, [rhPortal]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-8">
       <section className="relative overflow-hidden rounded-2xl border border-brand-border bg-brand-card shadow-sm">
@@ -301,13 +305,13 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>}
 
-          {rhPortal && rhPortal.comunicados.length > 0 && <div className="bg-brand-card border border-brand-border">
+          {rhPortal && pendingComunicados.length > 0 && <div className="bg-brand-card border border-brand-border">
             <div className="p-4 border-b border-brand-border flex items-center gap-2"><MessageSquareText size={17} className="text-brand-primary" /><div><h3 className="text-sm font-bold font-mono uppercase tracking-wider text-brand-text m-0">Comunicados do RH</h3><p className="mt-0.5 text-xs text-brand-muted">Avisos e atualizações enviados para você.</p></div></div>
-            <div className="space-y-3 p-3">{rhPortal.comunicados.map(({ comunicado, lida }) => {
+            <div className="space-y-3 p-3">{pendingComunicados.map(({ comunicado }) => {
               const isUpdate = comunicado.titulo.startsWith('Atualização do RH:');
-              return <article className={`relative rounded-xl border p-4 transition-colors ${lida ? 'border-brand-border bg-white/60' : 'border-brand-primary/30 bg-brand-primary/5 shadow-sm'}`} key={comunicado.id}>
-                {!lida && <span aria-label="Não lido" className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-brand-primary" />}
-                <div className="flex gap-3"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isUpdate ? 'bg-violet-500/10 text-violet-600' : 'bg-brand-primary/10 text-brand-primary'}`}>{isUpdate ? <CalendarDays size={17} /> : <BellRing size={17} />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 pr-5"><h4 className="text-sm font-semibold text-brand-text m-0">{comunicado.titulo}</h4><span className={`text-[10px] font-bold uppercase tracking-wide ${isUpdate ? 'text-violet-600' : 'text-brand-primary'}`}>{isUpdate ? 'Atualização' : comunicado.usuario_id ? 'Individual' : 'Comunicado geral'}</span></div><p className="mt-2 text-xs leading-relaxed text-brand-muted">{comunicado.mensagem}</p><span className="mt-2 block text-[10px] text-brand-muted">Enviado por {comunicado.criado_por?.nome || 'RH'}</span>{!lida && <button onClick={async () => { await rhApi.markMyComunicadoRead(comunicado.id); const data = await rhApi.myPortal(); setRhPortal(data); }} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#4d4c4c] bg-[#f6f9fe] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#c12525] shadow-sm hover:bg-[#eef2f8] focus:outline-none focus:ring-2 focus:ring-[#c12525]/25"><Check size={13} strokeWidth={3} />Confirmar leitura</button>}</div></div>
+              return <article className="relative rounded-xl border border-brand-primary/30 bg-brand-primary/5 p-4 shadow-sm transition-colors" key={comunicado.id}>
+                <span aria-label="Não lido" className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-brand-primary" />
+                <div className="flex gap-3"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isUpdate ? 'bg-violet-500/10 text-violet-600' : 'bg-brand-primary/10 text-brand-primary'}`}>{isUpdate ? <CalendarDays size={17} /> : <BellRing size={17} />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 pr-5"><h4 className="text-sm font-semibold text-brand-text m-0">{comunicado.titulo}</h4><span className={`text-[10px] font-bold uppercase tracking-wide ${isUpdate ? 'text-violet-600' : 'text-brand-primary'}`}>{isUpdate ? 'Atualização' : comunicado.usuario_id ? 'Individual' : 'Comunicado geral'}</span></div><p className="mt-2 text-xs leading-relaxed text-brand-muted">{comunicado.mensagem}</p><span className="mt-2 block text-[10px] text-brand-muted">Enviado por {comunicado.criado_por?.nome || 'RH'}</span><button onClick={async () => { setRhPortal(prev => prev ? { ...prev, comunicados: prev.comunicados.map(item => item.comunicado.id === comunicado.id ? { ...item, lida: true } : item) } : null); await rhApi.markMyComunicadoRead(comunicado.id); const data = await rhApi.myPortal(); setRhPortal(data); }} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#4d4c4c] bg-[#f6f9fe] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#c12525] shadow-sm hover:bg-[#eef2f8] focus:outline-none focus:ring-2 focus:ring-[#c12525]/25"><Check size={13} strokeWidth={3} />Confirmar leitura</button></div></div>
               </article>;
             })}</div>
           </div>}
