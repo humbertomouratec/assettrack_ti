@@ -112,6 +112,11 @@ export const AssetsPage: React.FC = () => {
   const [assetArmazenamentoId, setAssetArmazenamentoId] = useState<number | ''>('');
   const [assetDataAquisicao, setAssetDataAquisicao] = useState('');
   const [assetDepartamentoId, setAssetDepartamentoId] = useState<number | ''>('');
+  const [assetDatasheetPath, setAssetDatasheetPath] = useState<string>('');
+  const [assetDatasheetNome, setAssetDatasheetNome] = useState<string>('');
+  const [uploadingDatasheet, setUploadingDatasheet] = useState<boolean>(false);
+  const [datasheetError, setDatasheetError] = useState<string | null>(null);
+  const datasheetFileInputRef = useRef<HTMLInputElement>(null);
   const [referenceCreateType, setReferenceCreateType] = useState<'categoria' | 'localizacao' | 'armazenamento' | 'departamento' | null>(null);
   const [referenceCreateName, setReferenceCreateName] = useState('');
   const [referenceCreateError, setReferenceCreateError] = useState<string | null>(null);
@@ -348,6 +353,9 @@ export const AssetsPage: React.FC = () => {
     setAssetArmazenamentoId('');
     setAssetDataAquisicao('');
     setAssetDepartamentoId('');
+    setAssetDatasheetPath('');
+    setAssetDatasheetNome('');
+    setDatasheetError(null);
     setFormError(null);
     setShowFormModal(true);
   };
@@ -372,8 +380,40 @@ export const AssetsPage: React.FC = () => {
     setAssetArmazenamentoId(a.current_armazenamento_id || '');
     setAssetDataAquisicao(a.data_aquisicao ? a.data_aquisicao.split('T')[0] : '');
     setAssetDepartamentoId(a.current_departamento_id || '');
+    setAssetDatasheetPath(a.datasheet_path || '');
+    setAssetDatasheetNome(a.datasheet_nome || '');
+    setDatasheetError(null);
     setFormError(null);
     setShowFormModal(true);
+  };
+
+  const handleDatasheetFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'txt', 'csv'].includes(ext || '')) {
+      setDatasheetError('Formato inválido. Selecione um arquivo .pdf, .txt ou .csv');
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setDatasheetError('Arquivo muito grande. O tamanho máximo permitido é 25MB.');
+      return;
+    }
+
+    try {
+      setUploadingDatasheet(true);
+      setDatasheetError(null);
+      const res = await assetsApi.uploadDatasheet(file);
+      setAssetDatasheetPath(res.url);
+      setAssetDatasheetNome(res.filename);
+    } catch (err: any) {
+      setDatasheetError(err.response?.data?.error || 'Falha ao enviar arquivo do datasheet.');
+    } finally {
+      setUploadingDatasheet(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleSaveAsset = async (e: React.FormEvent) => {
@@ -401,6 +441,8 @@ export const AssetsPage: React.FC = () => {
       current_armazenamento_id: assetArmazenamentoId ? Number(assetArmazenamentoId) : null,
       current_departamento_id: assetDepartamentoId ? Number(assetDepartamentoId) : null,
       data_aquisicao: assetDataAquisicao ? new Date(assetDataAquisicao).toISOString() : null,
+      datasheet_path: assetDatasheetPath || null,
+      datasheet_nome: assetDatasheetNome || null,
     };
 
     try {
@@ -1383,7 +1425,19 @@ export const AssetsPage: React.FC = () => {
                             <td className="p-4">
                               <div className="font-medium text-brand-text flex items-center space-x-1.5">
                                 <span>{a.nome}</span>
-                                {a.bloqueado && <span title="Ativo Fixo Bloqueado"><Lock size={12} className="text-purple-400" /></span>}
+                                {a.bloqueado && <span title="Ativo Fixo Bloqueado"><Lock size={12} className="text-blue-400" /></span>}
+                                {a.datasheet_path && (
+                                  <a
+                                    href={toApiFileUrl(a.datasheet_path)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-brand-primary hover:text-brand-primary/80 transition-colors"
+                                    title={`Datasheet: ${a.datasheet_nome || 'Visualizar Datasheet'}`}
+                                  >
+                                    <FileText size={13} />
+                                  </a>
+                                )}
                               </div>
                               <div className="text-xs text-brand-muted">{a.modelo || 'Sem modelo'}</div>
                             </td>
@@ -2251,6 +2305,92 @@ export const AssetsPage: React.FC = () => {
                   rows={3}
                   className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text focus:outline-none focus:border-brand-primary font-sans"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase tracking-wider text-brand-muted mb-1.5 flex items-center justify-between">
+                  <span>Datasheet / Manual Técnico (.pdf, .txt, .csv)</span>
+                  {assetDatasheetPath && (
+                    <span className="text-emerald-400 font-normal">Anexo enviado</span>
+                  )}
+                </label>
+
+                <input
+                  type="file"
+                  ref={datasheetFileInputRef}
+                  onChange={handleDatasheetFileUpload}
+                  accept=".pdf,.txt,.csv"
+                  className="hidden"
+                />
+
+                {datasheetError && (
+                  <div className="mb-2 p-2 border border-red-500/30 bg-red-500/5 text-red-400 text-[11px] font-mono flex items-center space-x-2">
+                    <ShieldAlert size={14} />
+                    <span>{datasheetError}</span>
+                  </div>
+                )}
+
+                {assetDatasheetPath ? (
+                  <div className="flex items-center justify-between p-2.5 bg-brand-dark border border-brand-border rounded font-mono text-xs">
+                    <div className="flex items-center space-x-2 truncate pr-2">
+                      <FileText size={16} className="text-brand-primary shrink-0" />
+                      <span className="text-brand-text truncate font-medium">
+                        {assetDatasheetNome || 'datasheet_anexo'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <a
+                        href={toApiFileUrl(assetDatasheetPath)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-1 bg-brand-card hover:bg-brand-border text-brand-text text-[10px] font-mono uppercase border border-brand-border rounded transition-colors"
+                      >
+                        Visualizar
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => datasheetFileInputRef.current?.click()}
+                        disabled={uploadingDatasheet}
+                        className="px-2 py-1 border border-brand-border hover:border-brand-primary text-brand-muted hover:text-brand-text text-[10px] font-mono uppercase rounded transition-colors"
+                      >
+                        Substituir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssetDatasheetPath('');
+                          setAssetDatasheetNome('');
+                          setDatasheetError(null);
+                        }}
+                        className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                        title="Remover Datasheet"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => datasheetFileInputRef.current?.click()}
+                    disabled={uploadingDatasheet}
+                    className="w-full border-2 border-dashed border-brand-border hover:border-brand-primary/60 bg-brand-dark/40 hover:bg-brand-dark/70 p-3 text-center transition-colors flex items-center justify-center space-x-2 rounded cursor-pointer disabled:opacity-50"
+                  >
+                    {uploadingDatasheet ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin text-brand-primary" />
+                        <span className="font-mono text-xs text-brand-muted">Enviando datasheet...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={16} className="text-brand-muted" />
+                        <span className="font-mono text-xs text-brand-muted">
+                          Clique para anexar o datasheet (<strong className="text-brand-text">.pdf, .txt ou .csv</strong> — máx 25MB)
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 py-2 border-t border-b border-brand-border/30">
@@ -3185,6 +3325,32 @@ export const AssetsPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    {selectedAssetForDetail.datasheet_path && (
+                      <div className="border border-brand-border bg-brand-dark/10 p-4 space-y-2 rounded-sm">
+                        <h4 className="font-mono text-xs font-bold text-brand-primary uppercase tracking-widest flex items-center space-x-1.5">
+                          <FileText size={13} />
+                          <span>Datasheet / Manual Técnico</span>
+                        </h4>
+                        <div className="flex items-center justify-between bg-brand-dark p-2.5 border border-brand-border rounded font-mono text-xs">
+                          <div className="flex items-center space-x-2 truncate pr-2">
+                            <FileText size={15} className="text-brand-primary shrink-0" />
+                            <span className="text-brand-text truncate font-medium">
+                              {selectedAssetForDetail.datasheet_nome || 'datasheet_anexo'}
+                            </span>
+                          </div>
+                          <a
+                            href={toApiFileUrl(selectedAssetForDetail.datasheet_path)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 bg-brand-primary text-brand-dark font-bold hover:bg-brand-primary/90 text-[10px] uppercase rounded transition-colors shrink-0 flex items-center space-x-1"
+                          >
+                            <Download size={12} />
+                            <span>Abrir Datasheet</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Right Column: QR Code & Actions */}

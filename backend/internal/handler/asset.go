@@ -10,6 +10,8 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -1190,6 +1192,8 @@ func (h *AssetHandler) BulkDuplicate(c *gin.Context) {
 			Status:                 models.AssetStatusDisponivel,
 			Bloqueado:              template.Bloqueado,
 			RequerTermoRH:          template.RequerTermoRH,
+			DatasheetPath:          template.DatasheetPath,
+			DatasheetNome:          template.DatasheetNome,
 			CategoriaID:            template.CategoriaID,
 			FornecedorID:           template.FornecedorID,
 			NotaFiscalID:           template.NotaFiscalID,
@@ -1340,5 +1344,52 @@ func (h *AssetHandler) GetAssetHistory(c *gin.Context) {
 		"manutencoes_preventivas": prevOrders,
 		"planos_preventivos":      plans,
 		"solicitacoes_compra":     purchaseItems,
+	})
+}
+
+func (h *AssetHandler) UploadDatasheet(c *gin.Context) {
+	fileHeader, err := c.FormFile("arquivo")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Arquivo não fornecido"})
+		return
+	}
+
+	// Limit to 25MB
+	if fileHeader.Size > 25*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "O arquivo deve ter no máximo 25MB"})
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	validExts := map[string]bool{
+		".pdf": true,
+		".txt": true,
+		".csv": true,
+	}
+	if !validExts[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Formato inválido. Apenas arquivos .pdf, .txt ou .csv são permitidos"})
+		return
+	}
+
+	uploadDir := filepath.Join("uploads", "datasheets")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao criar diretório de upload"})
+		return
+	}
+
+	cleanOriginal := filepath.Base(fileHeader.Filename)
+	safeOriginal := strings.ReplaceAll(cleanOriginal, " ", "_")
+	filename := fmt.Sprintf("datasheet_%d_%s", time.Now().UnixNano(), safeOriginal)
+	dst := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(fileHeader, dst); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao salvar o arquivo do datasheet"})
+		return
+	}
+
+	publicPath := fmt.Sprintf("/uploads/datasheets/%s", filename)
+	c.JSON(http.StatusOK, gin.H{
+		"url":      publicPath,
+		"filename": cleanOriginal,
 	})
 }

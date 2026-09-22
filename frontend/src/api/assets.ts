@@ -234,4 +234,15 @@ export const assetsApi = {
     const response = await apiClient.get<AssetHistoryResponse>(`/assets/${id}/historico`);
     return response.data;
   },
+
+  uploadDatasheet: async (file: File): Promise<{ url: string; filename: string }> => {
+    const formData = new FormData();
+    formData.append('arquivo', file);
+    const response = await apiClient.post<{ url: string; filename: string }>('/assets/upload-datasheet', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };

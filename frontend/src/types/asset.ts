@@ -60,6 +60,8 @@ export interface Asset {
   status: AssetStatus;
   qr_code_path: string | null;
   foto_path: string | null;
+  datasheet_path?: string | null;
+  datasheet_nome?: string | null;
   numero_serie: string | null;
   em_posse_de: string | null;
   bloqueado: boolean;

@@ -179,6 +179,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			assets.GET("", assetHandler.List)
 			assets.GET("/export.csv", assetHandler.ExportCSV)
 			assets.POST("/import.csv", rManager, assetHandler.ImportCSV)
+			assets.POST("/upload-datasheet", rManager, assetHandler.UploadDatasheet)
 			assets.POST("", rManager, assetHandler.Create)
 			assets.POST("/bulk", rManager, assetHandler.BulkDuplicate)
 			assets.GET("/:id", assetHandler.GetByID)

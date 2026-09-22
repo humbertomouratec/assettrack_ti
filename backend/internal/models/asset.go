@@ -25,6 +25,8 @@ type Asset struct {
 	Status                 AssetStatus `gorm:"index;default:'Disponível'" json:"status"`
 	QRCodePath             *string     `gorm:"column:qr_code_path" json:"qr_code_path"`
 	FotoPath               *string     `gorm:"column:foto_path" json:"foto_path"`
+	DatasheetPath          *string     `gorm:"column:datasheet_path" json:"datasheet_path"`
+	DatasheetNome          *string     `gorm:"column:datasheet_nome" json:"datasheet_nome"`
 	NumeroSerie            *string     `gorm:"index;column:numero_serie" json:"numero_serie"`
 	EmPosseDe              *string     `gorm:"column:em_posse_de" json:"em_posse_de"`
 	Bloqueado              bool        `gorm:"default:false" json:"bloqueado"`
