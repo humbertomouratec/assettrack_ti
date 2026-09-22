@@ -7,7 +7,7 @@ import { suppliersApi } from '../api/suppliers';
 import { usersApi } from '../api/users';
 import { maintenanceApi } from '../api/maintenance';
 import { transactionApi } from '../api/transaction';
-import { toApiFileUrl } from '../api/client';
+import { toApiFileUrl, apiClient } from '../api/client';
 import type { 
   Asset, 
   AssetStatus, 
@@ -54,6 +54,16 @@ import {
   FileCheck,
   DollarSign
 } from 'lucide-react';
+
+const parseCsvText = (text: string): string[][] => {
+  const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+  if (lines.length === 0) return [];
+  const firstLine = lines[0];
+  const separator = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ';' : ',';
+  return lines.map(line => {
+    return line.split(separator).map(col => col.replace(/^"(.*)"$/, '$1').trim());
+  });
+};
 
 export const AssetsPage: React.FC = () => {
   const location = useLocation();
@@ -194,6 +204,44 @@ export const AssetsPage: React.FC = () => {
   const [detailDevolucaoNotas, setDetailDevolucaoNotas] = useState('');
   const [detailDevolucaoLoading, setDetailDevolucaoLoading] = useState(false);
   const [detailDevolucaoError, setDetailDevolucaoError] = useState<string | null>(null);
+
+  // Datasheet Viewer Modal State
+  const [viewingDatasheet, setViewingDatasheet] = useState<{
+    fileName: string;
+    fileUrl: string;
+    filePath?: string | null;
+  } | null>(null);
+  const [datasheetContentText, setDatasheetContentText] = useState<string>('');
+  const [datasheetCsvRows, setDatasheetCsvRows] = useState<string[][]>([]);
+  const [datasheetLoadingContent, setDatasheetLoadingContent] = useState<boolean>(false);
+  const [datasheetContentError, setDatasheetContentError] = useState<string | null>(null);
+
+  const handleOpenDatasheetViewer = async (fileName: string, fileUrl: string, filePath?: string | null) => {
+    setViewingDatasheet({ fileName, fileUrl, filePath });
+    setDatasheetContentText('');
+    setDatasheetCsvRows([]);
+    setDatasheetContentError(null);
+
+    const ext = (fileName.split('.').pop() || filePath?.split('.').pop() || '').toLowerCase();
+    if (ext === 'txt' || ext === 'csv') {
+      try {
+        setDatasheetLoadingContent(true);
+        const res = await apiClient.get<string>(fileUrl, { responseType: 'text' });
+        const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        if (ext === 'csv') {
+          const rows = parseCsvText(text);
+          setDatasheetCsvRows(rows);
+        } else {
+          setDatasheetContentText(text);
+        }
+      } catch (err: any) {
+        console.error('Falha ao carregar conteúdo do arquivo:', err);
+        setDatasheetContentError('Não foi possível ler o conteúdo do arquivo.');
+      } finally {
+        setDatasheetLoadingContent(false);
+      }
+    }
+  };
 
   const fetchAssetHistory = async (assetId: number) => {
     try {
@@ -1427,16 +1475,21 @@ export const AssetsPage: React.FC = () => {
                                 <span>{a.nome}</span>
                                 {a.bloqueado && <span title="Ativo Fixo Bloqueado"><Lock size={12} className="text-blue-400" /></span>}
                                 {a.datasheet_path && (
-                                  <a
-                                    href={assetsApi.getDatasheetUrl(a)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDatasheetViewer(
+                                        a.datasheet_nome || 'Datasheet',
+                                        assetsApi.getDatasheetUrl(a),
+                                        a.datasheet_path
+                                      );
+                                    }}
                                     className="text-brand-primary hover:text-brand-primary/80 transition-colors"
-                                    title={`Datasheet: ${a.datasheet_nome || 'Visualizar Datasheet'}`}
+                                    title={`Visualizar Datasheet: ${a.datasheet_nome || 'Arquivo'}`}
                                   >
                                     <FileText size={13} />
-                                  </a>
+                                  </button>
                                 )}
                               </div>
                               <div className="text-xs text-brand-muted">{a.modelo || 'Sem modelo'}</div>
@@ -2339,14 +2392,17 @@ export const AssetsPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center space-x-2 shrink-0">
-                      <a
-                        href={assetsApi.getDatasheetUrl({ id: editAssetId || undefined, datasheet_path: assetDatasheetPath })}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDatasheetViewer(
+                          assetDatasheetNome || 'Datasheet',
+                          editAssetId ? assetsApi.getDatasheetUrl({ id: editAssetId, datasheet_path: assetDatasheetPath }) : toApiFileUrl(assetDatasheetPath),
+                          assetDatasheetPath
+                        )}
                         className="px-2 py-1 bg-brand-card hover:bg-brand-border text-brand-text text-[10px] font-mono uppercase border border-brand-border rounded transition-colors"
                       >
                         Visualizar
-                      </a>
+                      </button>
                       <button
                         type="button"
                         onClick={() => datasheetFileInputRef.current?.click()}
@@ -3339,15 +3395,18 @@ export const AssetsPage: React.FC = () => {
                               {selectedAssetForDetail.datasheet_nome || 'datasheet_anexo'}
                             </span>
                           </div>
-                          <a
-                            href={assetsApi.getDatasheetUrl(selectedAssetForDetail)}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDatasheetViewer(
+                              selectedAssetForDetail.datasheet_nome || 'Datasheet',
+                              assetsApi.getDatasheetUrl(selectedAssetForDetail),
+                              selectedAssetForDetail.datasheet_path
+                            )}
                             className="px-3 py-1 bg-brand-primary text-brand-dark font-bold hover:bg-brand-primary/90 text-[10px] uppercase rounded transition-colors shrink-0 flex items-center space-x-1"
                           >
-                            <Download size={12} />
-                            <span>Abrir Datasheet</span>
-                          </a>
+                            <Eye size={12} />
+                            <span>Visualizar Datasheet</span>
+                          </button>
                         </div>
                       </div>
                     )}
@@ -4111,6 +4170,111 @@ export const AssetsPage: React.FC = () => {
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Datasheet Viewer Modal */}
+      {viewingDatasheet && (
+        <div className="fixed inset-0 bg-brand-dark/85 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl border border-brand-border bg-brand-card flex flex-col max-h-[90vh] rounded shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center bg-brand-dark/80 px-6 py-4 border-b border-brand-border">
+              <div className="flex items-center space-x-3 truncate">
+                <FileText size={20} className="text-brand-primary shrink-0" />
+                <div className="truncate">
+                  <h3 className="text-sm font-bold font-mono uppercase tracking-wider text-brand-text truncate">
+                    {viewingDatasheet.fileName || 'Datasheet do Ativo'}
+                  </h3>
+                  <span className="text-[10px] font-mono text-brand-muted uppercase">
+                    Visualizador de Documento Técnico
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3 shrink-0">
+                <a
+                  href={viewingDatasheet.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-brand-primary text-brand-dark hover:bg-brand-primary/90 text-xs font-mono font-bold uppercase tracking-wider rounded transition-colors"
+                >
+                  <Download size={13} />
+                  <span>Baixar Arquivo</span>
+                </a>
+                <button
+                  onClick={() => setViewingDatasheet(null)}
+                  className="p-1 text-brand-muted hover:text-brand-text transition-colors"
+                  title="Fechar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 p-6 overflow-y-auto bg-brand-dark/30">
+              {datasheetLoadingContent ? (
+                <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                  <RefreshCw size={24} className="animate-spin text-brand-primary" />
+                  <span className="font-mono text-xs text-brand-muted">Carregando conteúdo do arquivo...</span>
+                </div>
+              ) : datasheetContentError ? (
+                <div className="p-4 border border-red-500/30 bg-red-500/5 text-red-400 font-mono text-xs flex items-center space-x-2 rounded">
+                  <ShieldAlert size={18} />
+                  <span>{datasheetContentError}</span>
+                </div>
+              ) : (viewingDatasheet.fileName.toLowerCase().endsWith('.csv') || viewingDatasheet.filePath?.toLowerCase().endsWith('.csv')) && datasheetCsvRows.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-brand-muted">
+                    <span>Tabela de Dados CSV</span>
+                    <span>{datasheetCsvRows.length - 1} registros</span>
+                  </div>
+                  <div className="overflow-x-auto border border-brand-border/60 rounded">
+                    <table className="w-full text-left text-xs font-mono border-collapse">
+                      <thead>
+                        <tr className="bg-brand-dark border-b border-brand-border text-brand-primary uppercase tracking-wider text-[10px]">
+                          {datasheetCsvRows[0].map((col, idx) => (
+                            <th key={idx} className="p-3 border-r border-brand-border/40 last:border-r-0">{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-brand-border/30 bg-brand-card">
+                        {datasheetCsvRows.slice(1).map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-brand-dark/30 transition-colors">
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className="p-3 border-r border-brand-border/20 last:border-r-0 text-brand-text">
+                                {cell || '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (viewingDatasheet.fileName.toLowerCase().endsWith('.txt') || viewingDatasheet.filePath?.toLowerCase().endsWith('.txt')) ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-mono text-brand-muted uppercase">Conteúdo do Arquivo de Texto (.txt)</div>
+                  <pre className="font-mono text-xs p-4 bg-brand-dark border border-brand-border rounded text-brand-text whitespace-pre-wrap overflow-x-auto max-h-[60vh]">
+                    {datasheetContentText || 'Arquivo de texto sem conteúdo.'}
+                  </pre>
+                </div>
+              ) : (
+                <div className="w-full h-[65vh] flex flex-col space-y-2">
+                  <div className="text-[11px] font-mono text-brand-muted uppercase flex items-center justify-between">
+                    <span>Visualizador de Documento PDF</span>
+                    <span className="text-[10px] text-brand-muted">Utilize o leitor integrado ou o botão de download</span>
+                  </div>
+                  <iframe
+                    src={viewingDatasheet.fileUrl}
+                    className="w-full h-full border border-brand-border rounded bg-white"
+                    title={viewingDatasheet.fileName}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
