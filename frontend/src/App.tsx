@@ -76,6 +76,14 @@ const App: React.FC = () => {
             ) : IS_NATIVE_APP ? <Navigate to="/login" replace /> : <LandingPage />}
           />
           <Route
+            path="/dashboard"
+            element={
+              <MainLayout>
+                <DashboardPage />
+              </MainLayout>
+            }
+          />
+          <Route
             path="/users"
             element={
               <MainLayout>

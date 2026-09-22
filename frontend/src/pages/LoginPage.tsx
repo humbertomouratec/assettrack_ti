@@ -32,7 +32,14 @@ const choosePreferredCamera = (cameras: QrCamera[]) => {
 };
 
 export const LoginPage: React.FC = () => {
-  const loginStore = useAuthStore().login;
+  const { token, login: loginStore } = useAuthStore();
+
+  useEffect(() => {
+    if (token) {
+      window.location.href = '/profile';
+    }
+  }, [token]);
+
   const appAccessUrl = window.location.origin;
   const appAccessQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(appAccessUrl)}`;
   const isLocalhostAccess = ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -243,7 +250,7 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await authApi.login({ username: email, password });
       await loginStore(res.access_token);
-      window.location.href = '/';
+      window.location.href = '/profile';
     } catch (err: any) {
       setError(formatLoginError(err));
     } finally {
@@ -263,7 +270,7 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await authApi.qrLogin({ qr_token: qrToken, pin });
       await loginStore(res.access_token);
-      window.location.href = '/';
+      window.location.href = '/profile';
     } catch (err: any) {
       setError(formatLoginError(err));
     } finally {
