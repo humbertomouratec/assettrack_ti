@@ -1,18 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { dashboardApi } from '../api/dashboard';
 import { transactionApi } from '../api/transaction';
 import { maintenanceApi } from '../api/maintenance';
 import { kanbanApi } from '../api/kanban';
+import { preventiveApi } from '../api/preventive';
 import type { DashboardStats } from '../api/dashboard';
 import type { Solicitacao, SolicitacaoManutencao } from '../types';
+import type { MaintenanceOrder, PMNotification, PMDashboard } from '../types/preventive';
+import { notifyAndroid } from '../utils/androidNotifications';
 import {
   LayoutDashboard, Wrench, MessageSquare, Briefcase, BellRing, FileDown,
   AlertTriangle, Info, QrCode, ArrowLeftRight, UserCheck,
   Laptop, Calendar, Clock, X, Send, Paperclip, Star, TrendingUp,
   PlusCircle, Activity, Layers, BarChart3, PieChart, ShieldCheck, RefreshCw, Columns3,
-  ChevronRight, Package, Zap, ShieldAlert, ExternalLink, Eye, Maximize2
+  ChevronRight, Package, Zap, ShieldAlert, ExternalLink, Eye, Maximize2, Sparkles, Check
 } from 'lucide-react';
 import { triggerEmergencyAlertModal } from '../components/emergency/EmergencyGlobalHandler';
 import { serviceDeskApi } from '../api/serviceDesk';
@@ -46,6 +49,48 @@ ChartJS.register(
   ArcElement, Title, Tooltip, Legend, Filler
 );
 
+const pmStatusMeta: Record<string, { label: string; className: string }> = {
+  'Aberta': { label: 'Aberta', className: 'text-blue-500 border-blue-500/30 bg-blue-500/10' },
+  'Agendada': { label: 'Agendada', className: 'text-cyan-500 border-cyan-500/30 bg-cyan-500/10' },
+  'Em andamento': { label: 'Em andamento', className: 'text-amber-500 border-amber-500/30 bg-amber-500/10' },
+  'Aguardando peça': { label: 'Aguardando peça', className: 'text-orange-500 border-orange-500/30 bg-orange-500/10' },
+  'Pausada': { label: 'Pausada', className: 'text-slate-500 border-slate-500/30 bg-slate-500/10' },
+  'Concluída': { label: 'Concluída', className: 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' },
+  'Cancelada': { label: 'Cancelada', className: 'text-red-500 border-red-500/30 bg-red-500/10' },
+};
+
+const getPMDateInfo = (dataAgendada?: string) => {
+  if (!dataAgendada) return { label: 'Sem data agendada', isOverdue: false, isToday: false, className: 'text-brand-muted' };
+  const target = new Date(dataAgendada);
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 24 * 60 * 60 * 1000 - 1;
+  const targetTime = target.getTime();
+
+  if (targetTime < startToday) {
+    return {
+      label: `Atrasada (${target.toLocaleDateString('pt-BR')})`,
+      isOverdue: true,
+      isToday: false,
+      className: 'text-red-500 font-bold bg-red-500/10 border-red-500/30 px-2 py-0.5 rounded border'
+    };
+  }
+  if (targetTime >= startToday && targetTime <= endToday) {
+    return {
+      label: 'Agendada para Hoje!',
+      isOverdue: false,
+      isToday: true,
+      className: 'text-amber-500 font-bold bg-amber-500/10 border-amber-500/30 px-2 py-0.5 rounded border'
+    };
+  }
+  return {
+    label: target.toLocaleDateString('pt-BR'),
+    isOverdue: false,
+    isToday: false,
+    className: 'text-brand-muted font-medium'
+  };
+};
+
 export const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const userRole = user?.role?.toLowerCase() || '';
@@ -64,6 +109,14 @@ export const DashboardPage: React.FC = () => {
   const [activeAvisos, setActiveAvisos] = useState<Aviso[]>([]);
   const [selectedAviso, setSelectedAviso] = useState<Aviso | null>(null);
   const [kanbanNotifications, setKanbanNotifications] = useState<KanbanNotification[]>([]);
+
+  // Preventive Maintenance states
+  const [pmNotifications, setPmNotifications] = useState<PMNotification[]>([]);
+  const [myAssignedPMOrders, setMyAssignedPMOrders] = useState<MaintenanceOrder[]>([]);
+  const [pmDashboardStats, setPmDashboardStats] = useState<PMDashboard | null>(null);
+  const [overduePMOrdersCount, setOverduePMOrdersCount] = useState<number>(0);
+  const [unassignedPMOrdersCount, setUnassignedPMOrdersCount] = useState<number>(0);
+  const notifiedPMOrderIdsRef = useRef<Set<number>>(new Set());
 
   // Service desk states for collaborator tracking
   const [myTickets, setMyTickets] = useState<ServiceTicket[]>([]);
@@ -200,12 +253,73 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const fetchPMDashboardData = async () => {
+    try {
+      const notifs = await preventiveApi.myNotifications();
+      const unreadNotifs = (notifs || []).filter((n) => !n.lida);
+      setPmNotifications(unreadNotifs);
+
+      // Trigger native Android notification for newly received PM assignment notifications
+      unreadNotifs.forEach((notif) => {
+        if (!notifiedPMOrderIdsRef.current.has(notif.id)) {
+          notifiedPMOrderIdsRef.current.add(notif.id);
+          notifyAndroid('Nova Manutenção Preventiva', notif.mensagem, {
+            tipo: 'PREVENTIVA_DESIGNACAO',
+            order_id: notif.order_id,
+          });
+        }
+      });
+
+      if (isStaff) {
+        const allOrders = await preventiveApi.listOrders('', 0, 200);
+        const now = new Date();
+        const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+        const myOrders = (allOrders || []).filter(
+          (o) =>
+            (o.tecnico_id === user?.id || o.tecnico?.id === user?.id) &&
+            o.status !== 'Concluída' &&
+            o.status !== 'Cancelada'
+        );
+        setMyAssignedPMOrders(myOrders);
+
+        const overdue = (allOrders || []).filter(
+          (o) =>
+            o.data_agendada &&
+            new Date(o.data_agendada).getTime() < startToday &&
+            o.status !== 'Concluída' &&
+            o.status !== 'Cancelada'
+        );
+        setOverduePMOrdersCount(overdue.length);
+
+        const unassigned = (allOrders || []).filter(
+          (o) =>
+            !o.tecnico_id &&
+            !o.tecnico?.id &&
+            o.status !== 'Concluída' &&
+            o.status !== 'Cancelada'
+        );
+        setUnassignedPMOrdersCount(unassigned.length);
+
+        try {
+          const dashData = await preventiveApi.dashboard();
+          setPmDashboardStats(dashData);
+        } catch {
+          // ignore non-critical stats fetch errors
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar dados de Manutenção Preventiva no dashboard:', err);
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
       fetchStats(),
       fetchActiveAvisos(),
       fetchKanbanNotifications(),
+      fetchPMDashboardData(),
       !isStaff ? fetchUserDashboardData() : Promise.resolve(),
     ]);
   };
@@ -469,6 +583,7 @@ export const DashboardPage: React.FC = () => {
     fetchStats();
     fetchActiveAvisos();
     fetchKanbanNotifications();
+    fetchPMDashboardData();
     if (!isStaff) {
       fetchUserDashboardData();
     }
@@ -479,10 +594,11 @@ export const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Real-time polling for active avisos (for all users)
+  // Real-time polling for active avisos and preventive maintenance (for all users)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchActiveAvisos();
+      fetchPMDashboardData();
     }, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -823,6 +939,71 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Preventive Maintenance Unread Notifications (Assigned Orders / Updates) */}
+      {pmNotifications.length > 0 && (
+        <div className="border border-amber-400/60 bg-amber-500/10 p-4 rounded-sm shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded bg-amber-500/20 text-amber-400">
+                <Wrench size={18} />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 font-mono flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-amber-400" />
+                  Manutenção Preventiva: Notificações ({pmNotifications.length})
+                </h3>
+                <p className="text-[11px] text-brand-muted">Você tem ordens de serviço preventivas designadas ou atualizadas.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await preventiveApi.markNotificationsRead();
+                setPmNotifications([]);
+              }}
+              className="text-xs text-amber-400 hover:text-amber-300 underline font-mono shrink-0 text-left sm:text-right"
+            >
+              Marcar todas como lidas
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {pmNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="flex items-center justify-between gap-3 rounded border border-amber-500/30 bg-brand-card/90 px-3 py-2 text-xs"
+              >
+                <span className="text-brand-text truncate">{notif.mensagem}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {notif.order_id && (
+                    <Link
+                      to={`/manutencoes-preventivas?openDetail=1&orderId=${notif.order_id}`}
+                      onClick={async () => {
+                        await preventiveApi.markNotificationRead(notif.id);
+                        setPmNotifications((current) => current.filter((item) => item.id !== notif.id));
+                      }}
+                      className="px-2 py-1 bg-brand-primary text-brand-dark text-[11px] font-mono font-bold uppercase rounded hover:bg-brand-primary/90 transition-colors"
+                    >
+                      Abrir OS
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await preventiveApi.markNotificationRead(notif.id);
+                      setPmNotifications((current) => current.filter((item) => item.id !== notif.id));
+                    }}
+                    className="p-1 text-brand-muted hover:text-brand-text rounded"
+                    title="Marcar como lida"
+                  >
+                    <Check size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Alert Banner for Pending Asset Requests (Staff/Managers) */}
       {isStaff && stats.pending_asset_requests > 0 && (
         <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 flex items-center justify-between shadow-lg">
@@ -869,6 +1050,40 @@ export const DashboardPage: React.FC = () => {
             className="px-4 py-2 bg-red-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-red-400 transition-all shrink-0"
           >
             Analisar Manutenções
+          </Link>
+        </div>
+      )}
+
+      {/* Alert Banner for Preventative Maintenance Issues (Staff/Managers) */}
+      {isStaff && ['admin', 'gerente_ti', 'gerente_infra'].includes(userRole) && (overduePMOrdersCount > 0 || unassignedPMOrdersCount > 0) && (
+        <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-amber-500/20 text-amber-400 rounded">
+              <Wrench size={24} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider font-mono">
+                Atenção Gestão: Manutenção Preventiva
+              </h3>
+              <p className="text-xs text-brand-muted mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                {overduePMOrdersCount > 0 && (
+                  <span className="text-red-400 font-bold">
+                    • {overduePMOrdersCount} {overduePMOrdersCount === 1 ? 'OS Preventiva Atrasada' : 'OS Preventivas Atrasadas'}
+                  </span>
+                )}
+                {unassignedPMOrdersCount > 0 && (
+                  <span className="text-amber-300 font-bold">
+                    • {unassignedPMOrdersCount} {unassignedPMOrdersCount === 1 ? 'OS Sem Técnico Designado' : 'OS Sem Técnico Designado'}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/manutencoes-preventivas"
+            className="px-4 py-2 bg-amber-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-amber-400 transition-all shrink-0"
+          >
+            Gerenciar Preventivas
           </Link>
         </div>
       )}
@@ -1272,6 +1487,13 @@ export const DashboardPage: React.FC = () => {
                 <Briefcase size={14} />
                 <span>Compras & Ordens</span>
               </Link>
+              <Link
+                to="/manutencoes-preventivas"
+                className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500 hover:text-white border border-cyan-500/30 text-cyan-600 text-xs font-mono font-bold transition-all flex items-center space-x-1.5"
+              >
+                <Wrench size={14} />
+                <span>Preventivas{pmDashboardStats?.open_orders !== undefined && pmDashboardStats.open_orders > 0 ? ` (${pmDashboardStats.open_orders})` : ''}</span>
+              </Link>
             </div>
           </div>
 
@@ -1441,6 +1663,108 @@ export const DashboardPage: React.FC = () => {
             </Link>
 
           </div>
+
+          {/* Technician Assigned Preventive Maintenance Orders */}
+          {(userRole === 'tecnico' || myAssignedPMOrders.length > 0) && (
+            <div className="bg-brand-card border border-brand-border p-5 rounded-sm shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-brand-border">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-brand-primary/10 text-brand-primary border border-brand-primary/20 rounded-lg">
+                    <Wrench size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-brand-text font-mono flex items-center gap-2">
+                      <span>Minhas Ordens Preventivas Designadas</span>
+                      {myAssignedPMOrders.length > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-primary/20 text-brand-primary border border-brand-primary/30">
+                          {myAssignedPMOrders.length}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-brand-muted">
+                      Ordens de serviço de manutenção preventiva sob sua responsabilidade técnica.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  to="/manutencoes-preventivas"
+                  className="px-3 py-1.5 bg-brand-dark hover:bg-brand-primary/10 border border-brand-border hover:border-brand-primary/40 text-brand-primary text-xs font-mono font-bold transition-all flex items-center space-x-1.5 rounded"
+                >
+                  <span>Ver Todas Preventivas</span>
+                  <ChevronRight size={14} />
+                </Link>
+              </div>
+
+              {myAssignedPMOrders.length === 0 ? (
+                <div className="py-6 text-center text-xs text-brand-muted font-mono bg-brand-dark/20 border border-brand-border/40">
+                  Você não possui ordens preventivas pendentes atribuídas no momento.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {myAssignedPMOrders.slice(0, 6).map((order) => {
+                    const dateInfo = getPMDateInfo(order.data_agendada);
+                    const statusMeta = pmStatusMeta[order.status] || {
+                      label: order.status,
+                      className: 'text-brand-muted border-brand-border bg-brand-dark/20',
+                    };
+                    return (
+                      <div
+                        key={order.id}
+                        className={`p-3.5 rounded border flex flex-col justify-between space-y-3 transition-all ${
+                          dateInfo.isOverdue
+                            ? 'border-red-500/40 bg-red-500/5'
+                            : dateInfo.isToday
+                            ? 'border-amber-500/40 bg-amber-500/5'
+                            : 'border-brand-border bg-brand-dark/20'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-mono text-xs font-bold text-brand-primary">
+                              {order.numero}
+                            </span>
+                            <span className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 border rounded ${statusMeta.className}`}>
+                              {statusMeta.label}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-brand-text mt-1 truncate" title={order.asset?.nome || order.infra_predial_servico || 'Manutenção Preventiva'}>
+                            {order.asset?.nome || order.infra_predial_servico || 'Manutenção Preventiva'}
+                          </h4>
+                          {order.asset?.e_patrimonio && (
+                            <span className="text-[10px] text-brand-muted font-mono block">
+                              Patrimônio: {order.asset.e_patrimonio}
+                            </span>
+                          )}
+                          {order.plan?.nome && (
+                            <span className="text-[10px] text-brand-muted font-mono block truncate">
+                              Plano: {order.plan.nome}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="border-t border-brand-border/60 pt-2 flex items-center justify-between gap-2 text-xs">
+                          <span className={dateInfo.className}>{dateInfo.label}</span>
+                          <span className={`text-[10px] font-bold uppercase font-mono px-1.5 py-0.5 rounded ${
+                            order.prioridade === 'Urgente' || order.prioridade === 'Alta' ? 'text-red-500 bg-red-500/10' : 'text-brand-muted bg-brand-dark/40'
+                          }`}>
+                            {order.prioridade}
+                          </span>
+                        </div>
+
+                        <Link
+                          to={`/manutencoes-preventivas?openDetail=1&orderId=${order.id}`}
+                          className="inline-flex items-center justify-center gap-1.5 w-full py-1.5 bg-brand-primary text-brand-dark text-xs font-bold font-mono uppercase tracking-wider rounded hover:bg-brand-primary/90 transition-colors shadow-sm"
+                        >
+                          <Wrench size={13} />
+                          <span>Executar OS</span>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

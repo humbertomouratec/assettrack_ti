@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Key, Camera, Loader2, Save, CalendarDays, MessageSquareText, Building2, Mail, BadgeCheck, ShieldCheck, Check, BellRing } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { User, Key, Camera, Loader2, Save, CalendarDays, MessageSquareText, Building2, Mail, BadgeCheck, ShieldCheck, Check, BellRing, Wrench, ExternalLink, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { profileApi } from '../api/profile';
 import { toApiFileUrl } from '../api/client';
 import { rhApi } from '../api/rh';
+import { preventiveApi } from '../api/preventive';
 import type { MyRHPortal, RHStatusRecord, RHStatusType } from '../types/rh';
+import type { MaintenanceOrder, PMNotification } from '../types/preventive';
 import { notifyAndroid } from '../utils/androidNotifications';
 
 const rhStatusMeta: Record<RHStatusType, { label: string; className: string }> = {
@@ -13,6 +16,48 @@ const rhStatusMeta: Record<RHStatusType, { label: string; className: string }> =
   ferias: { label: 'Em férias', className: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   banco_horas: { label: 'Banco de horas', className: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   desligado: { label: 'Desligado', className: 'text-red-400 border-red-500/30 bg-red-500/10' },
+};
+
+const pmStatusMeta: Record<string, { label: string; className: string }> = {
+  'Aberta': { label: 'Aberta', className: 'text-blue-500 border-blue-500/30 bg-blue-500/10' },
+  'Agendada': { label: 'Agendada', className: 'text-cyan-500 border-cyan-500/30 bg-cyan-500/10' },
+  'Em andamento': { label: 'Em andamento', className: 'text-amber-500 border-amber-500/30 bg-amber-500/10' },
+  'Aguardando peça': { label: 'Aguardando peça', className: 'text-orange-500 border-orange-500/30 bg-orange-500/10' },
+  'Pausada': { label: 'Pausada', className: 'text-purple-500 border-purple-500/30 bg-purple-500/10' },
+  'Concluída': { label: 'Concluída', className: 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' },
+  'Cancelada': { label: 'Cancelada', className: 'text-red-500 border-red-500/30 bg-red-500/10' },
+};
+
+const getPMDateInfo = (dataAgendada?: string) => {
+  if (!dataAgendada) return { label: 'Sem data agendada', isOverdue: false, isToday: false, className: 'text-brand-muted' };
+  const target = new Date(dataAgendada);
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 24 * 60 * 60 * 1000 - 1;
+  const targetTime = target.getTime();
+
+  if (targetTime < startToday) {
+    return {
+      label: `Atrasada (${target.toLocaleDateString('pt-BR')})`,
+      isOverdue: true,
+      isToday: false,
+      className: 'text-red-500 font-bold bg-red-500/10 border-red-500/30 px-2 py-0.5 rounded border'
+    };
+  }
+  if (targetTime >= startToday && targetTime <= endToday) {
+    return {
+      label: 'Agendada para Hoje!',
+      isOverdue: false,
+      isToday: true,
+      className: 'text-amber-500 font-bold bg-amber-500/10 border-amber-500/30 px-2 py-0.5 rounded border'
+    };
+  }
+  return {
+    label: target.toLocaleDateString('pt-BR'),
+    isOverdue: false,
+    isToday: false,
+    className: 'text-brand-muted font-medium'
+  };
 };
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
@@ -76,9 +121,17 @@ export const ProfilePage: React.FC = () => {
   const [rhLoadError, setRhLoadError] = useState('');
   const [messages, setMessages] = useState<{ mensagens: any[]; contatos: Array<{ id: number; nome: string }> }>({ mensagens: [], contatos: [] });
   const [messageForm, setMessageForm] = useState({ destinatario_id: '', assunto: '', mensagem: '' });
+  const [myPMOrders, setMyPMOrders] = useState<MaintenanceOrder[]>([]);
+  const [pmNotifications, setPmNotifications] = useState<PMNotification[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notifiedRHIds = useRef<Set<number>>(new Set());
+  const notifiedPMIds = useRef<Set<number>>(new Set());
+
+  const isTechOrStaff = useMemo(() => {
+    const role = user?.role?.toLowerCase() || '';
+    return ['tecnico', 'admin', 'gerente_ti', 'gerente_infra'].includes(role);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -114,6 +167,40 @@ export const ProfilePage: React.FC = () => {
     const interval = window.setInterval(loadRH, 30000);
     return () => { mounted = false; window.clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!isTechOrStaff || !user?.id) return;
+
+    const loadPMData = async () => {
+      try {
+        const [orders, notifs] = await Promise.all([
+          preventiveApi.listOrders('', 0, 100).catch(() => []),
+          preventiveApi.myNotifications().catch(() => [])
+        ]);
+        if (!mounted) return;
+        const assigned = (orders || []).filter(o => o.tecnico_id === user.id && o.status !== 'Concluída' && o.status !== 'Cancelada');
+        setMyPMOrders(assigned);
+
+        const unread = (notifs || []).filter(n => !n.lida);
+        setPmNotifications(unread);
+
+        // Notify technician on Android when newly assigned to an order
+        unread.forEach(notif => {
+          if (!notifiedPMIds.current.has(notif.id)) {
+            notifiedPMIds.current.add(notif.id);
+            void notifyAndroid('Nova OS Designada', notif.mensagem, { pm_order_id: notif.order_id });
+          }
+        });
+      } catch (err) {
+        console.error('Erro ao carregar ordens preventivas no perfil:', err);
+      }
+    };
+
+    void loadPMData();
+    const interval = window.setInterval(loadPMData, 20000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [isTechOrStaff, user]);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -378,6 +465,154 @@ export const ProfilePage: React.FC = () => {
               {rhCalendar.length === 0 && !rhLoadError && <p className="m-0 text-xs text-brand-muted">Nenhum registro de folga, férias ou banco de horas foi lançado no seu calendário.</p>}
             </div>
           </div>
+
+          {/* Ordens de Manutenção Preventiva Designadas ao Técnico */}
+          {isTechOrStaff && (myPMOrders.length > 0 || pmNotifications.length > 0) && (
+            <div className="bg-brand-card border border-brand-border">
+              <div className="p-5 border-b border-brand-border flex items-center justify-between gap-4">
+                <div className="flex items-center">
+                  <div className="mr-3 rounded-xl bg-amber-500/10 p-2 text-amber-500">
+                    <Wrench size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-brand-text m-0">Minhas Ordens de Serviço Preventivas</h3>
+                    <p className="text-xs text-brand-muted mt-0.5">Manutenções preventivas designadas para você executar.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 px-2.5 py-1 rounded-full">
+                    {myPMOrders.length} {myPMOrders.length === 1 ? 'OS ativa' : 'OS ativas'}
+                  </span>
+                  <Link
+                    to="/manutencoes-preventivas"
+                    className="text-xs font-mono text-brand-primary hover:underline flex items-center gap-1 shrink-0"
+                  >
+                    <span>Módulo Completo</span>
+                    <ExternalLink size={13} />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Notificações não lidas de atribuição */}
+              {pmNotifications.length > 0 && (
+                <div className="p-4 bg-amber-500/10 border-b border-amber-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-300 uppercase font-mono flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-amber-400" />
+                      Novas designações ({pmNotifications.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await preventiveApi.markNotificationsRead();
+                        setPmNotifications([]);
+                      }}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 underline font-mono"
+                    >
+                      Marcar todas como lidas
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {pmNotifications.map(notif => (
+                      <div key={notif.id} className="flex items-center justify-between gap-2 p-2 bg-brand-card/80 rounded border border-amber-500/30 text-xs">
+                        <span className="text-brand-text text-xs truncate">{notif.mensagem}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {notif.order_id && (
+                            <Link
+                              to={`/manutencoes-preventivas?openDetail=1&orderId=${notif.order_id}`}
+                              onClick={async () => {
+                                await preventiveApi.markNotificationRead(notif.id);
+                                setPmNotifications(prev => prev.filter(n => n.id !== notif.id));
+                              }}
+                              className="px-2 py-0.5 bg-brand-primary text-brand-dark text-[10px] font-mono font-bold uppercase rounded"
+                            >
+                              Ver OS
+                            </Link>
+                          )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await preventiveApi.markNotificationRead(notif.id);
+                              setPmNotifications(prev => prev.filter(n => n.id !== notif.id));
+                            }}
+                            className="text-brand-muted hover:text-brand-text"
+                            title="Confirmar ciência"
+                          >
+                            <Check size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de Ordens Atribuídas */}
+              <div className="p-5 space-y-3">
+                {myPMOrders.length === 0 ? (
+                  <p className="text-xs text-brand-muted m-0">Nenhuma ordem preventiva pendente atribuída a você no momento.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {myPMOrders.map(order => {
+                      const dateInfo = getPMDateInfo(order.data_agendada);
+                      const statusMeta = pmStatusMeta[order.status] || { label: order.status, className: 'text-brand-muted border-brand-border bg-brand-dark/20' };
+                      return (
+                        <div
+                          key={order.id}
+                          className={`p-4 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                            dateInfo.isOverdue
+                              ? 'border-red-500/40 bg-red-500/5'
+                              : dateInfo.isToday
+                              ? 'border-amber-500/40 bg-amber-500/5'
+                              : 'border-brand-border bg-white/40'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-mono text-xs font-bold text-brand-primary">{order.numero}</span>
+                              <h4 className="text-sm font-semibold text-brand-text mt-0.5">
+                                {order.asset?.nome || order.infra_predial_servico || 'Manutenção Preventiva'}
+                              </h4>
+                              {order.asset?.e_patrimonio && (
+                                <span className="text-[11px] text-brand-muted font-mono block">
+                                  Patrimônio: {order.asset.e_patrimonio}
+                                </span>
+                              )}
+                              {order.plan?.nome && (
+                                <span className="text-[10px] text-brand-muted font-mono block mt-0.5">
+                                  Plano: {order.plan.nome}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 border rounded-md ${statusMeta.className}`}>
+                              {statusMeta.label}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-border/60 pt-2 text-xs">
+                            <span className={dateInfo.className}>{dateInfo.label}</span>
+                            <span className={`text-[10px] font-bold uppercase font-mono px-1.5 py-0.5 rounded ${
+                              order.prioridade === 'Urgente' || order.prioridade === 'Alta' ? 'text-red-500 bg-red-500/10' : 'text-brand-muted bg-brand-dark/20'
+                            }`}>
+                              Prioridade {order.prioridade}
+                            </span>
+                          </div>
+
+                          <Link
+                            to={`/manutencoes-preventivas?openDetail=1&orderId=${order.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-brand-primary text-brand-dark text-xs font-bold font-mono uppercase tracking-wider rounded hover:bg-brand-primary/90 transition-colors shadow-sm"
+                          >
+                            <Wrench size={14} />
+                            <span>Abrir e Executar OS</span>
+                          </Link>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="bg-brand-card border border-brand-border">
             <div className="p-5 border-b border-brand-border flex items-center"><div className="mr-3 rounded-xl bg-brand-primary/10 p-2 text-brand-primary"><MessageSquareText size={18} /></div><div><h3 className="text-base font-bold text-brand-text m-0">Comunicação privada</h3><p className="text-xs text-brand-muted mt-0.5">Converse somente com seu gestor ou com RH.</p></div></div>
