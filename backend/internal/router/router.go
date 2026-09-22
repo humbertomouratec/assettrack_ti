@@ -187,6 +187,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			assets.PUT("/:id", rManager, assetHandler.Update)
 			assets.DELETE("/:id", rAdmin, assetHandler.Delete)
 			assets.GET("/:id/qrcode", assetHandler.GetQRCode)
+			assets.GET("/:id/datasheet", assetHandler.DownloadDatasheet)
 			assets.POST("/scan-qr", assetHandler.ScanQRCode)
 		}
 

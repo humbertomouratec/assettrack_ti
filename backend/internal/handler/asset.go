@@ -1378,8 +1378,7 @@ func (h *AssetHandler) UploadDatasheet(c *gin.Context) {
 	}
 
 	cleanOriginal := filepath.Base(fileHeader.Filename)
-	safeOriginal := strings.ReplaceAll(cleanOriginal, " ", "_")
-	filename := fmt.Sprintf("datasheet_%d_%s", time.Now().UnixNano(), safeOriginal)
+	filename := fmt.Sprintf("datasheet_%d%s", time.Now().UnixNano(), ext)
 	dst := filepath.Join(uploadDir, filename)
 
 	if err := c.SaveUploadedFile(fileHeader, dst); err != nil {
@@ -1392,4 +1391,34 @@ func (h *AssetHandler) UploadDatasheet(c *gin.Context) {
 		"url":      publicPath,
 		"filename": cleanOriginal,
 	})
+}
+
+func (h *AssetHandler) DownloadDatasheet(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+
+	asset, err := h.repo.GetByID(uint(id))
+	if err != nil || asset.DatasheetPath == nil || *asset.DatasheetPath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Datasheet não encontrado para este ativo"})
+		return
+	}
+
+	relPath := strings.TrimPrefix(*asset.DatasheetPath, "/")
+	if _, err := os.Stat(relPath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Arquivo do datasheet não foi encontrado no servidor"})
+		return
+	}
+
+	filename := "datasheet"
+	if asset.DatasheetNome != nil && *asset.DatasheetNome != "" {
+		filename = *asset.DatasheetNome
+	} else {
+		filename = filepath.Base(relPath)
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	c.File(relPath)
 }

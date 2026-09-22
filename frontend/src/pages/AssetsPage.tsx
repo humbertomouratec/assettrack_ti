@@ -1428,7 +1428,7 @@ export const AssetsPage: React.FC = () => {
                                 {a.bloqueado && <span title="Ativo Fixo Bloqueado"><Lock size={12} className="text-blue-400" /></span>}
                                 {a.datasheet_path && (
                                   <a
-                                    href={toApiFileUrl(a.datasheet_path)}
+                                    href={assetsApi.getDatasheetUrl(a)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
@@ -2340,7 +2340,7 @@ export const AssetsPage: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-2 shrink-0">
                       <a
-                        href={toApiFileUrl(assetDatasheetPath)}
+                        href={assetsApi.getDatasheetUrl({ id: editAssetId || undefined, datasheet_path: assetDatasheetPath })}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-2 py-1 bg-brand-card hover:bg-brand-border text-brand-text text-[10px] font-mono uppercase border border-brand-border rounded transition-colors"
@@ -3340,7 +3340,7 @@ export const AssetsPage: React.FC = () => {
                             </span>
                           </div>
                           <a
-                            href={toApiFileUrl(selectedAssetForDetail.datasheet_path)}
+                            href={assetsApi.getDatasheetUrl(selectedAssetForDetail)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-3 py-1 bg-brand-primary text-brand-dark font-bold hover:bg-brand-primary/90 text-[10px] uppercase rounded transition-colors shrink-0 flex items-center space-x-1"
