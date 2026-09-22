@@ -7,7 +7,7 @@ import { suppliersApi } from '../api/suppliers';
 import { usersApi } from '../api/users';
 import { maintenanceApi } from '../api/maintenance';
 import { transactionApi } from '../api/transaction';
-import { toApiFileUrl, apiClient } from '../api/client';
+import { toApiFileUrl } from '../api/client';
 import type { 
   Asset, 
   AssetStatus, 
@@ -229,19 +229,23 @@ export const AssetsPage: React.FC = () => {
     setDatasheetContentError(null);
   };
 
-  const handleOpenDatasheetViewer = async (fileName: string, targetUrl: string, filePath?: string | null) => {
+  const handleOpenDatasheetViewer = async (
+    fileName: string,
+    assetTarget: { id?: number; datasheet_path?: string | null }
+  ) => {
     if (activeDatasheetBlobRef.current) {
       URL.revokeObjectURL(activeDatasheetBlobRef.current);
       activeDatasheetBlobRef.current = null;
     }
 
-    setViewingDatasheet({ fileName, fileUrl: targetUrl, filePath });
+    const downloadUrl = assetsApi.getDatasheetUrl(assetTarget);
+    setViewingDatasheet({ fileName, fileUrl: downloadUrl, filePath: assetTarget.datasheet_path });
     setDatasheetContentText('');
     setDatasheetCsvRows([]);
     setDatasheetContentError(null);
     setDatasheetLoadingContent(true);
 
-    const ext = (fileName.split('.').pop() || filePath?.split('.').pop() || '').toLowerCase();
+    const ext = (fileName.split('.').pop() || assetTarget.datasheet_path?.split('.').pop() || '').toLowerCase();
 
     try {
       let mimeType = 'application/octet-stream';
@@ -249,17 +253,15 @@ export const AssetsPage: React.FC = () => {
       else if (ext === 'txt') mimeType = 'text/plain';
       else if (ext === 'csv') mimeType = 'text/csv';
 
-      const res = await apiClient.get<Blob>(targetUrl, {
-        responseType: 'blob',
-      });
+      const blobData = await assetsApi.downloadDatasheetBlob(assetTarget);
 
       // Check if server returned index.html fallback
-      if (res.data.type && res.data.type.includes('text/html')) {
+      if (blobData.type && blobData.type.includes('text/html')) {
         throw new Error('O arquivo do datasheet não foi encontrado no servidor.');
       }
 
       if (ext === 'csv') {
-        const text = await res.data.text();
+        const text = await blobData.text();
         const rows = parseCsvText(text);
         if (rows.length === 0) {
           setDatasheetContentText(text);
@@ -267,17 +269,17 @@ export const AssetsPage: React.FC = () => {
           setDatasheetCsvRows(rows);
         }
       } else if (ext === 'txt') {
-        const text = await res.data.text();
+        const text = await blobData.text();
         setDatasheetContentText(text);
       } else {
-        const blob = new Blob([res.data], { type: mimeType });
+        const blob = new Blob([blobData], { type: mimeType });
         const objectUrl = URL.createObjectURL(blob);
         activeDatasheetBlobRef.current = objectUrl;
         setViewingDatasheet({
           fileName,
-          fileUrl: targetUrl,
+          fileUrl: downloadUrl,
           blobUrl: objectUrl,
-          filePath,
+          filePath: assetTarget.datasheet_path,
         });
       }
     } catch (err: any) {
@@ -1527,8 +1529,7 @@ export const AssetsPage: React.FC = () => {
                                       e.stopPropagation();
                                       handleOpenDatasheetViewer(
                                         a.datasheet_nome || 'Datasheet',
-                                        assetsApi.getDatasheetUrl(a),
-                                        a.datasheet_path
+                                        a
                                       );
                                     }}
                                     className="text-brand-primary hover:text-brand-primary/80 transition-colors"
@@ -2442,8 +2443,7 @@ export const AssetsPage: React.FC = () => {
                         type="button"
                         onClick={() => handleOpenDatasheetViewer(
                           assetDatasheetNome || 'Datasheet',
-                          editAssetId ? assetsApi.getDatasheetUrl({ id: editAssetId, datasheet_path: assetDatasheetPath }) : toApiFileUrl(assetDatasheetPath),
-                          assetDatasheetPath
+                          { id: editAssetId || undefined, datasheet_path: assetDatasheetPath }
                         )}
                         className="px-2 py-1 bg-brand-card hover:bg-brand-border text-brand-text text-[10px] font-mono uppercase border border-brand-border rounded transition-colors"
                       >
@@ -3445,8 +3445,7 @@ export const AssetsPage: React.FC = () => {
                             type="button"
                             onClick={() => handleOpenDatasheetViewer(
                               selectedAssetForDetail.datasheet_nome || 'Datasheet',
-                              assetsApi.getDatasheetUrl(selectedAssetForDetail),
-                              selectedAssetForDetail.datasheet_path
+                              selectedAssetForDetail
                             )}
                             className="px-3 py-1 bg-brand-primary text-brand-dark font-bold hover:bg-brand-primary/90 text-[10px] uppercase rounded transition-colors shrink-0 flex items-center space-x-1"
                           >

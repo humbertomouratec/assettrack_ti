@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { API_BASE_URL, apiClient, toApiFileUrl } from './client';
 import type { Asset, AssetReferences, BulkDuplicateRequest, BulkDuplicateResponse, AssetCategory, Localizacao, Armazenamento, Departamento, AssetImportResponse, AssetHistoryResponse } from '../types';
 
@@ -246,11 +247,30 @@ export const assetsApi = {
     return response.data;
   },
 
+  downloadDatasheetBlob: async (asset: { id?: number; datasheet_path?: string | null }): Promise<Blob> => {
+    if (asset.id) {
+      const response = await apiClient.get<Blob>(`/assets/${asset.id}/datasheet`, {
+        responseType: 'blob',
+      });
+      return response.data;
+    }
+    if (asset.datasheet_path) {
+      const fileUrl = toApiFileUrl(asset.datasheet_path);
+      const token = localStorage.getItem('token');
+      const response = await axios.get<Blob>(fileUrl, {
+        responseType: 'blob',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    }
+    throw new Error('Nenhum datasheet disponível para este ativo.');
+  },
+
   getDatasheetUrl: (asset: Asset | { id?: number; datasheet_path?: string | null }): string => {
     if (!asset.datasheet_path) return '';
     if (asset.id) {
       const token = localStorage.getItem('token');
-      return `${API_BASE_URL}/assets/${asset.id}/datasheet?token=${token || ''}`;
+      return `${toApiFileUrl(`/api/v1/assets/${asset.id}/datasheet`)}?token=${token || ''}`;
     }
     return toApiFileUrl(asset.datasheet_path);
   },
