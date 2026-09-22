@@ -976,7 +976,7 @@ export const DashboardPage: React.FC = () => {
                 <div className="flex items-center gap-2 shrink-0">
                   {notif.order_id && (
                     <Link
-                      to={`/manutencoes-preventivas?openDetail=1&orderId=${notif.order_id}`}
+                      to={`/manutencao-preventiva?openDetail=1&orderId=${notif.order_id}`}
                       onClick={async () => {
                         await preventiveApi.markNotificationRead(notif.id);
                         setPmNotifications((current) => current.filter((item) => item.id !== notif.id));
@@ -1080,7 +1080,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
           <Link
-            to="/manutencoes-preventivas"
+            to="/manutencao-preventiva?tab=ordens"
             className="px-4 py-2 bg-amber-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-amber-400 transition-all shrink-0"
           >
             Gerenciar Preventivas
@@ -1488,7 +1488,7 @@ export const DashboardPage: React.FC = () => {
                 <span>Compras & Ordens</span>
               </Link>
               <Link
-                to="/manutencoes-preventivas"
+                to="/manutencao-preventiva?tab=ordens"
                 className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500 hover:text-white border border-cyan-500/30 text-cyan-600 text-xs font-mono font-bold transition-all flex items-center space-x-1.5"
               >
                 <Wrench size={14} />
@@ -1687,7 +1687,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <Link
-                  to="/manutencoes-preventivas"
+                  to="/manutencao-preventiva?tab=ordens"
                   className="px-3 py-1.5 bg-brand-dark hover:bg-brand-primary/10 border border-brand-border hover:border-brand-primary/40 text-brand-primary text-xs font-mono font-bold transition-all flex items-center space-x-1.5 rounded"
                 >
                   <span>Ver Todas Preventivas</span>
@@ -1752,7 +1752,7 @@ export const DashboardPage: React.FC = () => {
                         </div>
 
                         <Link
-                          to={`/manutencoes-preventivas?openDetail=1&orderId=${order.id}`}
+                          to={`/manutencao-preventiva?openDetail=1&orderId=${order.id}`}
                           className="inline-flex items-center justify-center gap-1.5 w-full py-1.5 bg-brand-primary text-brand-dark text-xs font-bold font-mono uppercase tracking-wider rounded hover:bg-brand-primary/90 transition-colors shadow-sm"
                         >
                           <Wrench size={13} />

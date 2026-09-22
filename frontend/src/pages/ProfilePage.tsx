@@ -484,7 +484,7 @@ export const ProfilePage: React.FC = () => {
                     {myPMOrders.length} {myPMOrders.length === 1 ? 'OS ativa' : 'OS ativas'}
                   </span>
                   <Link
-                    to="/manutencoes-preventivas"
+                    to="/manutencao-preventiva?tab=ordens"
                     className="text-xs font-mono text-brand-primary hover:underline flex items-center gap-1 shrink-0"
                   >
                     <span>Módulo Completo</span>
@@ -519,7 +519,7 @@ export const ProfilePage: React.FC = () => {
                         <div className="flex items-center gap-2 shrink-0">
                           {notif.order_id && (
                             <Link
-                              to={`/manutencoes-preventivas?openDetail=1&orderId=${notif.order_id}`}
+                              to={`/manutencao-preventiva?openDetail=1&orderId=${notif.order_id}`}
                               onClick={async () => {
                                 await preventiveApi.markNotificationRead(notif.id);
                                 setPmNotifications(prev => prev.filter(n => n.id !== notif.id));
@@ -599,7 +599,7 @@ export const ProfilePage: React.FC = () => {
                           </div>
 
                           <Link
-                            to={`/manutencoes-preventivas?openDetail=1&orderId=${order.id}`}
+                            to={`/manutencao-preventiva?openDetail=1&orderId=${order.id}`}
                             className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-brand-primary text-brand-dark text-xs font-bold font-mono uppercase tracking-wider rounded hover:bg-brand-primary/90 transition-colors shadow-sm"
                           >
                             <Wrench size={14} />

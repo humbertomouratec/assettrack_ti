@@ -142,6 +142,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/manutencoes-preventivas"
+            element={
+              <MainLayout>
+                <PreventiveMaintenancePage />
+              </MainLayout>
+            }
+          />
+          <Route
             path="/kanban"
             element={
               <MainLayout>

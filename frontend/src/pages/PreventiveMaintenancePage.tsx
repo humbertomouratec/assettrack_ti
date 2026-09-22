@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { preventiveApi } from '../api/preventive';
 import { procurementApi } from '../api/procurement';
 import { toApiFileUrl } from '../api/client';
@@ -126,6 +127,7 @@ const getCalendarEventDate = (order: MaintenanceOrder) => {
 };
 
 export const PreventiveMaintenancePage: React.FC = () => {
+  const location = useLocation();
   const user = useAuthStore().user;
   const canEditStructure = user ? structureRoles.includes(user.role) : false;
   const canWorkOrder = user ? workRoles.includes(user.role) : false;
@@ -673,7 +675,8 @@ export const PreventiveMaintenancePage: React.FC = () => {
       sessionStorage.removeItem(preventiveOrderIntentStorageKey);
     }
 
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
     const shouldOpenOrder = params.get('openOrder') === '1';
     const shouldOpenDetail = params.get('openDetail') === '1';
     const planIdParam = params.get('planId');
@@ -687,7 +690,11 @@ export const PreventiveMaintenancePage: React.FC = () => {
     const sourceProjectId = payloadFromStorage?.sourceProjectId ?? (sourceProjectIdParam ? Number(sourceProjectIdParam) : null);
     const orderId = detailIntentFromStorage?.orderId ?? (orderIdParam ? Number(orderIdParam) : null);
 
-    if ((shouldOpenDetail || detailIntentFromStorage) && orderId && !Number.isNaN(orderId)) {
+    if (tabParam && ['dashboard', 'relatorio', 'planos', 'ordens', 'calendario', 'notifs'].includes(tabParam)) {
+      setTab(tabParam as any);
+    }
+
+    if ((shouldOpenDetail || orderIdParam || detailIntentFromStorage) && orderId && !Number.isNaN(orderId)) {
       setTab('ordens');
       setOrderOriginContext({
         sourceProjectId: detailIntentFromStorage?.sourceProjectId ?? (sourceProjectId && !Number.isNaN(sourceProjectId) ? sourceProjectId : null),
@@ -742,7 +749,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
     window.history.replaceState({}, '', nextUrl);
-  }, []);
+  }, [location.search]);
 
   const loadChecklistDraftsFromPlan = async (planId: number | null) => {
     if (!planId) {
