@@ -1406,8 +1406,22 @@ func (h *AssetHandler) DownloadDatasheet(c *gin.Context) {
 		return
 	}
 
-	relPath := strings.TrimPrefix(*asset.DatasheetPath, "/")
-	if _, err := os.Stat(relPath); os.IsNotExist(err) {
+	pathVal := strings.TrimSpace(*asset.DatasheetPath)
+	candidates := []string{
+		strings.TrimPrefix(pathVal, "/"),
+		filepath.Join("uploads", strings.TrimPrefix(pathVal, "/uploads/")),
+		filepath.Join("uploads", "datasheets", filepath.Base(pathVal)),
+	}
+
+	var foundPath string
+	for _, cand := range candidates {
+		if _, err := os.Stat(cand); err == nil {
+			foundPath = cand
+			break
+		}
+	}
+
+	if foundPath == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Arquivo do datasheet não foi encontrado no servidor"})
 		return
 	}
@@ -1416,9 +1430,19 @@ func (h *AssetHandler) DownloadDatasheet(c *gin.Context) {
 	if asset.DatasheetNome != nil && *asset.DatasheetNome != "" {
 		filename = *asset.DatasheetNome
 	} else {
-		filename = filepath.Base(relPath)
+		filename = filepath.Base(foundPath)
+	}
+
+	ext := strings.ToLower(filepath.Ext(foundPath))
+	switch ext {
+	case ".pdf":
+		c.Header("Content-Type", "application/pdf")
+	case ".txt":
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+	case ".csv":
+		c.Header("Content-Type", "text/csv; charset=utf-8")
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
-	c.File(relPath)
+	c.File(foundPath)
 }

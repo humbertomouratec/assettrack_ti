@@ -209,37 +209,83 @@ export const AssetsPage: React.FC = () => {
   const [viewingDatasheet, setViewingDatasheet] = useState<{
     fileName: string;
     fileUrl: string;
+    blobUrl?: string;
     filePath?: string | null;
   } | null>(null);
   const [datasheetContentText, setDatasheetContentText] = useState<string>('');
   const [datasheetCsvRows, setDatasheetCsvRows] = useState<string[][]>([]);
   const [datasheetLoadingContent, setDatasheetLoadingContent] = useState<boolean>(false);
   const [datasheetContentError, setDatasheetContentError] = useState<string | null>(null);
+  const activeDatasheetBlobRef = useRef<string | null>(null);
 
-  const handleOpenDatasheetViewer = async (fileName: string, fileUrl: string, filePath?: string | null) => {
-    setViewingDatasheet({ fileName, fileUrl, filePath });
+  const handleCloseDatasheetViewer = () => {
+    if (activeDatasheetBlobRef.current) {
+      URL.revokeObjectURL(activeDatasheetBlobRef.current);
+      activeDatasheetBlobRef.current = null;
+    }
+    setViewingDatasheet(null);
     setDatasheetContentText('');
     setDatasheetCsvRows([]);
     setDatasheetContentError(null);
+  };
+
+  const handleOpenDatasheetViewer = async (fileName: string, targetUrl: string, filePath?: string | null) => {
+    if (activeDatasheetBlobRef.current) {
+      URL.revokeObjectURL(activeDatasheetBlobRef.current);
+      activeDatasheetBlobRef.current = null;
+    }
+
+    setViewingDatasheet({ fileName, fileUrl: targetUrl, filePath });
+    setDatasheetContentText('');
+    setDatasheetCsvRows([]);
+    setDatasheetContentError(null);
+    setDatasheetLoadingContent(true);
 
     const ext = (fileName.split('.').pop() || filePath?.split('.').pop() || '').toLowerCase();
-    if (ext === 'txt' || ext === 'csv') {
-      try {
-        setDatasheetLoadingContent(true);
-        const res = await apiClient.get<string>(fileUrl, { responseType: 'text' });
-        const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-        if (ext === 'csv') {
-          const rows = parseCsvText(text);
-          setDatasheetCsvRows(rows);
-        } else {
-          setDatasheetContentText(text);
-        }
-      } catch (err: any) {
-        console.error('Falha ao carregar conteúdo do arquivo:', err);
-        setDatasheetContentError('Não foi possível ler o conteúdo do arquivo.');
-      } finally {
-        setDatasheetLoadingContent(false);
+
+    try {
+      let mimeType = 'application/octet-stream';
+      if (ext === 'pdf') mimeType = 'application/pdf';
+      else if (ext === 'txt') mimeType = 'text/plain';
+      else if (ext === 'csv') mimeType = 'text/csv';
+
+      const res = await apiClient.get<Blob>(targetUrl, {
+        responseType: 'blob',
+      });
+
+      // Check if server returned index.html fallback
+      if (res.data.type && res.data.type.includes('text/html')) {
+        throw new Error('O arquivo do datasheet não foi encontrado no servidor.');
       }
+
+      if (ext === 'csv') {
+        const text = await res.data.text();
+        const rows = parseCsvText(text);
+        if (rows.length === 0) {
+          setDatasheetContentText(text);
+        } else {
+          setDatasheetCsvRows(rows);
+        }
+      } else if (ext === 'txt') {
+        const text = await res.data.text();
+        setDatasheetContentText(text);
+      } else {
+        const blob = new Blob([res.data], { type: mimeType });
+        const objectUrl = URL.createObjectURL(blob);
+        activeDatasheetBlobRef.current = objectUrl;
+        setViewingDatasheet({
+          fileName,
+          fileUrl: targetUrl,
+          blobUrl: objectUrl,
+          filePath,
+        });
+      }
+    } catch (err: any) {
+      console.error('Falha ao carregar conteúdo do datasheet:', err);
+      const errMsg = err.response?.data?.error || err.message || 'Não foi possível carregar o arquivo do datasheet.';
+      setDatasheetContentError(errMsg);
+    } finally {
+      setDatasheetLoadingContent(false);
     }
   };
 
@@ -4195,17 +4241,15 @@ export const AssetsPage: React.FC = () => {
 
               <div className="flex items-center space-x-3 shrink-0">
                 <a
-                  href={viewingDatasheet.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
+                  href={viewingDatasheet.blobUrl || viewingDatasheet.fileUrl}
+                  download={viewingDatasheet.fileName || 'datasheet.pdf'}
                   className="flex items-center space-x-1 px-3 py-1.5 bg-brand-primary text-brand-dark hover:bg-brand-primary/90 text-xs font-mono font-bold uppercase tracking-wider rounded transition-colors"
                 >
                   <Download size={13} />
                   <span>Baixar Arquivo</span>
                 </a>
                 <button
-                  onClick={() => setViewingDatasheet(null)}
+                  onClick={handleCloseDatasheetViewer}
                   className="p-1 text-brand-muted hover:text-brand-text transition-colors"
                   title="Fechar"
                 >
@@ -4262,17 +4306,22 @@ export const AssetsPage: React.FC = () => {
                     {datasheetContentText || 'Arquivo de texto sem conteúdo.'}
                   </pre>
                 </div>
-              ) : (
+              ) : viewingDatasheet.blobUrl ? (
                 <div className="w-full h-[65vh] flex flex-col space-y-2">
                   <div className="text-[11px] font-mono text-brand-muted uppercase flex items-center justify-between">
                     <span>Visualizador de Documento PDF</span>
                     <span className="text-[10px] text-brand-muted">Utilize o leitor integrado ou o botão de download</span>
                   </div>
                   <iframe
-                    src={viewingDatasheet.fileUrl}
+                    src={viewingDatasheet.blobUrl}
                     className="w-full h-full border border-brand-border rounded bg-white"
                     title={viewingDatasheet.fileName}
                   />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                  <FileText size={32} className="text-brand-muted" />
+                  <span className="font-mono text-xs text-brand-muted">Arquivo não disponível para pré-visualização.</span>
                 </div>
               )}
             </div>
