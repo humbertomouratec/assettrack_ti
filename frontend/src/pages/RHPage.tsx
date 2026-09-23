@@ -265,7 +265,12 @@ export const RHPage: React.FC = () => {
       let midiaTipo: string | undefined = noticeMediaTipo || undefined;
 
       if (noticeMediaFile) {
-        const uploaded = await rhApi.uploadComunicadoMedia(noticeMediaFile);
+        const defaultFilename = noticeMediaTipo === 'audio'
+          ? 'gravacao_audio.weba'
+          : noticeMediaTipo === 'video'
+          ? 'gravacao_video.webm'
+          : (noticeMediaFile instanceof File ? noticeMediaFile.name : 'anexo.png');
+        const uploaded = await rhApi.uploadComunicadoMedia(noticeMediaFile, defaultFilename, noticeMediaTipo || undefined);
         if (uploaded.midia_tipo === 'imagem') {
           imageUrl = uploaded.url;
         } else if (uploaded.midia_tipo === 'audio') {

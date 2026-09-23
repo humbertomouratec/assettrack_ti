@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Mic, Video, Image as ImageIcon, Upload, Play, Square, Trash2, RotateCcw, AlertCircle, Film } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Camera, Mic, Video, Image as ImageIcon, Upload, Play, Square, Trash2, RotateCcw, AlertCircle, Film, RefreshCw, SwitchCamera } from 'lucide-react';
 
 interface MediaAttachmentInputProps {
   mediaTipo: 'imagem' | 'audio' | 'video' | null;
@@ -23,6 +23,10 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
 
+  // Camera device selection
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -34,7 +38,7 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
   }, [mediaTipo]);
 
   // Clean up media streams and timers when unmounting or changing tab
-  const stopCurrentStream = () => {
+  const stopCurrentStream = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -50,17 +54,35 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
+    if (liveVideoRef.current) {
+      liveVideoRef.current.srcObject = null;
+    }
     setIsRecording(false);
     setCameraActive(false);
     setRecordingSeconds(0);
     setStreamError(null);
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
       stopCurrentStream();
     };
-  }, []);
+  }, [stopCurrentStream]);
+
+  // Enumerate cameras
+  const refreshCameraList = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+      setAvailableCameras(videoDevices);
+      if (videoDevices.length > 0 && !selectedCameraId) {
+        setSelectedCameraId(videoDevices[0].deviceId);
+      }
+    } catch (err) {
+      console.error('Error enumerating cameras:', err);
+    }
+  }, [selectedCameraId]);
 
   const handleSelectTab = (tab: 'imagem' | 'audio' | 'video' | null) => {
     if (disabled) return;
@@ -99,12 +121,21 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
     onChange(null, null, null);
   };
 
-  // Audio Recording
+  // ==========================================
+  // AUDIO RECORDING (AUDIO-ONLY)
+  // ==========================================
   const startAudioRecording = async () => {
     stopCurrentStream();
     setStreamError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
       mediaStreamRef.current = stream;
       recordedChunksRef.current = [];
 
@@ -112,7 +143,9 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
         ? 'audio/ogg;codecs=opus'
-        : 'audio/webm';
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4';
 
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
@@ -124,10 +157,9 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-        const previewUrl = URL.createObjectURL(blob);
-        onChange('audio', blob, previewUrl);
-        // Stop stream tracks
+        const file = new File(recordedChunksRef.current, 'gravacao_audio.weba', { type: mimeType });
+        const previewUrl = URL.createObjectURL(file);
+        onChange('audio', file, previewUrl);
         if (mediaStreamRef.current) {
           mediaStreamRef.current.getTracks().forEach((t) => t.stop());
           mediaStreamRef.current = null;
@@ -158,15 +190,29 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
     setIsRecording(false);
   };
 
-  // Video Recording (Webcam + Mic)
-  const startCameraPreview = async () => {
-    stopCurrentStream();
+  // ==========================================
+  // VIDEO RECORDING (WEBCAM + MIC WITH PREVIEW & CAMERA SELECTOR)
+  // ==========================================
+  const startCameraPreview = useCallback(async (deviceIdOverride?: string) => {
+    // Stop any existing stream
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+
     setStreamError(null);
+    const targetDeviceId = deviceIdOverride || selectedCameraId;
+
     try {
+      const videoConstraints: MediaTrackConstraints = targetDeviceId
+        ? { deviceId: { exact: targetDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } };
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        video: videoConstraints,
         audio: true,
       });
+
       mediaStreamRef.current = stream;
       setCameraActive(true);
 
@@ -174,10 +220,30 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
         liveVideoRef.current.srcObject = stream;
         liveVideoRef.current.play().catch(() => {});
       }
+
+      // Re-enumerate devices to fetch actual labels now that permission is granted
+      await refreshCameraList();
+
+      // If no specific camera was selected yet, find the one currently used
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const settings = videoTrack.getSettings();
+        if (settings.deviceId && !targetDeviceId) {
+          setSelectedCameraId(settings.deviceId);
+        }
+      }
     } catch (err: any) {
       console.error('Camera error:', err);
-      setStreamError('Não foi possível acessar a câmera ou microfone. Verifique as permissões do navegador.');
+      setStreamError('Não foi possível acessar a câmera ou microfone selecionado. Verifique as permissões do navegador.');
       setCameraActive(false);
+    }
+  }, [selectedCameraId, refreshCameraList]);
+
+  // Handle switching camera from dropdown
+  const handleCameraChange = async (newDeviceId: string) => {
+    setSelectedCameraId(newDeviceId);
+    if (cameraActive && !isRecording) {
+      await startCameraPreview(newDeviceId);
     }
   };
 
@@ -201,13 +267,15 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-      const previewUrl = URL.createObjectURL(blob);
-      onChange('video', blob, previewUrl);
-      // Stop webcam stream tracks
+      const file = new File(recordedChunksRef.current, 'gravacao_video.webm', { type: mimeType });
+      const previewUrl = URL.createObjectURL(file);
+      onChange('video', file, previewUrl);
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
+      }
+      if (liveVideoRef.current) {
+        liveVideoRef.current.srcObject = null;
       }
       setCameraActive(false);
     };
@@ -309,7 +377,9 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
         </div>
       )}
 
+      {/* ========================================== */}
       {/* IMAGE TAB */}
+      {/* ========================================== */}
       {activeTab === 'imagem' && (
         <div className="space-y-3 rounded-lg border border-brand-border/60 bg-brand-card/60 p-3">
           {!mediaPreviewUrl ? (
@@ -331,7 +401,7 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
               <button
                 type="button"
                 onClick={handleClearMedia}
-                className="absolute right-2 top-2 rounded-full bg-red-600/90 p-1.5 text-white hover:bg-red-700 shadow-md"
+                className="absolute right-2 top-2 rounded-full bg-red-600/90 p-1.5 text-white hover:bg-red-700 shadow-md transition-colors"
                 title="Remover imagem"
               >
                 <Trash2 size={14} />
@@ -341,7 +411,9 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
         </div>
       )}
 
+      {/* ========================================== */}
       {/* AUDIO TAB */}
+      {/* ========================================== */}
       {activeTab === 'audio' && (
         <div className="space-y-3 rounded-lg border border-brand-border/60 bg-brand-card/60 p-3">
           {/* Sub-tabs: Gravar vs Upload */}
@@ -382,7 +454,7 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-brand-border p-6 text-center hover:border-brand-primary/60 hover:bg-brand-primary/5 transition-colors">
               <Upload size={22} className="text-brand-primary" />
               <span className="text-xs font-medium text-brand-text">Clique para enviar um arquivo de áudio</span>
-              <span className="text-[10px] text-brand-muted font-mono">Formatos: MP3, WAV, OGG, M4A, WEBM (máx 100MB)</span>
+              <span className="text-[10px] text-brand-muted font-mono">Formatos: MP3, WAV, OGG, M4A, WEBA (máx 100MB)</span>
               <input
                 type="file"
                 accept="audio/*"
@@ -433,7 +505,7 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
               <div className="flex items-center justify-between text-xs font-mono text-brand-muted">
                 <span className="text-brand-text font-semibold flex items-center gap-1.5">
                   <Mic size={13} className="text-brand-primary" />
-                  Áudio Pronto
+                  Áudio Gravado / Selecionado
                 </span>
                 <button
                   type="button"
@@ -450,7 +522,9 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
         </div>
       )}
 
-      {/* VIDEO TAB */}
+      {/* ========================================== */}
+      {/* VIDEO TAB (WITH LIVE PREVIEW & CAMERA SELECTOR) */}
+      {/* ========================================== */}
       {activeTab === 'video' && (
         <div className="space-y-3 rounded-lg border border-brand-border/60 bg-brand-card/60 p-3">
           {/* Sub-tabs: Gravar Webcam vs Upload */}
@@ -505,45 +579,99 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
           {recordMode === 'record' && !mediaPreviewUrl && (
             <div className="space-y-3">
               {!cameraActive ? (
-                <div className="flex flex-col items-center justify-center gap-3 p-4 text-center">
+                <div className="flex flex-col items-center justify-center gap-3 p-5 text-center">
                   <button
                     type="button"
                     disabled={disabled}
-                    onClick={startCameraPreview}
+                    onClick={() => startCameraPreview()}
                     className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-primary/20 text-brand-primary border border-brand-primary/40 hover:bg-brand-primary/30 hover:scale-105 transition-all shadow-lg"
                     title="Ativar câmera"
                   >
                     <Camera size={26} />
                   </button>
-                  <p className="text-xs text-brand-muted m-0">Clique para abrir a webcam e preparar a gravação.</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-brand-text m-0">Ativar Câmera e Microfone</p>
+                    <p className="text-[11px] text-brand-muted m-0">Veja o preview em tempo real e selecione sua webcam antes de gravar.</p>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="relative rounded-lg overflow-hidden border border-brand-border bg-black aspect-video max-h-60 mx-auto">
-                    <video ref={liveVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-                    {isRecording && (
-                      <div className="absolute top-2 left-2 flex items-center gap-1.5 rounded-md bg-black/70 px-2.5 py-1 text-xs font-mono font-bold text-red-400">
-                        <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping" />
+                <div className="space-y-3">
+                  {/* Camera Selector Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-border/80 bg-brand-dark/80 p-2 text-xs">
+                    <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                      <SwitchCamera size={14} className="text-brand-primary shrink-0" />
+                      <span className="text-[11px] font-mono text-brand-muted shrink-0">Câmera:</span>
+                      <select
+                        value={selectedCameraId}
+                        onChange={(e) => handleCameraChange(e.target.value)}
+                        disabled={isRecording}
+                        aria-label="Selecionar câmera"
+                        className="flex-1 rounded border border-brand-border bg-brand-card px-2 py-1 text-xs text-brand-text focus:border-brand-primary focus:outline-none"
+                      >
+                        {availableCameras.length > 0 ? (
+                          availableCameras.map((cam, idx) => (
+                            <option key={cam.deviceId || idx} value={cam.deviceId}>
+                              {cam.label || `Câmera ${idx + 1}`}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">Câmera Padrão do Sistema</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isRecording}
+                      onClick={() => startCameraPreview(selectedCameraId)}
+                      className="inline-flex items-center gap-1 rounded bg-brand-card border border-brand-border px-2 py-1 text-[11px] font-mono text-brand-muted hover:text-brand-text transition-colors"
+                      title="Reiniciar / Atualizar câmera"
+                    >
+                      <RefreshCw size={11} />
+                      Recarregar
+                    </button>
+                  </div>
+
+                  {/* Real-time Viewfinder */}
+                  <div className="relative rounded-xl overflow-hidden border-2 border-brand-border bg-black aspect-video max-h-72 mx-auto shadow-xl">
+                    <video
+                      ref={liveVideoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full h-full object-contain bg-black"
+                    />
+
+                    {/* Status Overlay */}
+                    {isRecording ? (
+                      <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-red-600/90 backdrop-blur-sm px-3 py-1 text-xs font-mono font-bold text-white shadow-lg animate-pulse">
+                        <span className="h-2.5 w-2.5 rounded-full bg-white animate-ping" />
                         REC {formatTimer(recordingSeconds)}
+                      </div>
+                    ) : (
+                      <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-0.5 text-[11px] font-mono font-semibold text-emerald-400 border border-emerald-500/30">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        Preview Ao Vivo
                       </div>
                     )}
                   </div>
 
-                  <div className="flex justify-center gap-2">
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-center gap-3 pt-1">
                     {!isRecording ? (
                       <>
                         <button
                           type="button"
                           onClick={startVideoRecording}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold font-mono uppercase text-white shadow hover:bg-red-700"
+                          className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2 text-xs font-bold font-mono uppercase text-white shadow-lg hover:bg-red-700 transition-all hover:scale-105"
                         >
-                          <Play size={14} />
+                          <Play size={15} />
                           Iniciar Gravação
                         </button>
                         <button
                           type="button"
                           onClick={stopCurrentStream}
-                          className="rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-xs text-brand-muted hover:text-brand-text"
+                          className="rounded-lg border border-brand-border bg-brand-dark px-3.5 py-2 text-xs text-brand-muted hover:text-brand-text transition-colors"
                         >
                           Fechar Câmera
                         </button>
@@ -552,10 +680,10 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
                       <button
                         type="button"
                         onClick={stopVideoRecording}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-5 py-2 text-xs font-bold font-mono uppercase text-white shadow hover:bg-red-700"
+                        className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-6 py-2.5 text-xs font-bold font-mono uppercase text-white shadow-xl hover:bg-red-700 transition-all animate-bounce"
                       >
-                        <Square size={14} />
-                        Parar e Salvar Vídeo
+                        <Square size={15} />
+                        Parar e Concluir Vídeo
                       </button>
                     )}
                   </div>
@@ -564,13 +692,13 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
             </div>
           )}
 
-          {/* Video Preview Player */}
+          {/* Video Preview Player (Recorded / Uploaded) */}
           {mediaPreviewUrl && (
             <div className="space-y-2 rounded-lg border border-brand-border bg-brand-dark/80 p-3">
               <div className="flex items-center justify-between text-xs font-mono text-brand-muted">
                 <span className="text-brand-text font-semibold flex items-center gap-1.5">
                   <Video size={13} className="text-brand-primary" />
-                  Vídeo Pronto
+                  Vídeo Pronto para Publicação
                 </span>
                 <button
                   type="button"
@@ -581,7 +709,7 @@ export const MediaAttachmentInput: React.FC<MediaAttachmentInputProps> = ({
                   Gravar / Enviar outro
                 </button>
               </div>
-              <video controls playsInline src={mediaPreviewUrl} className="w-full max-h-56 rounded-lg bg-black" />
+              <video controls playsInline src={mediaPreviewUrl} className="w-full max-h-64 rounded-lg bg-black object-contain shadow-md" />
             </div>
           )}
         </div>

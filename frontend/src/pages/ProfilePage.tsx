@@ -508,17 +508,17 @@ export const ProfilePage: React.FC = () => {
 
                           {/* Media attachments indicators */}
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            {(comunicado.imagem_url || comunicado.midia_tipo === 'imagem') && (
+                            {(comunicado.midia_tipo === 'imagem' || (!comunicado.midia_tipo && comunicado.imagem_url)) && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-mono text-brand-muted bg-brand-dark/50 px-1.5 py-0.5 rounded border border-brand-border">
                                 <ImageIcon size={11} className="text-brand-primary" /> Imagem
                               </span>
                             )}
-                            {(comunicado.audio_url || comunicado.midia_tipo === 'audio') && (
+                            {(comunicado.midia_tipo === 'audio' || (!comunicado.midia_tipo && comunicado.audio_url)) && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-mono text-brand-muted bg-brand-dark/50 px-1.5 py-0.5 rounded border border-brand-border">
                                 <Volume2 size={11} className="text-brand-primary" /> Áudio
                               </span>
                             )}
-                            {(comunicado.video_url || comunicado.midia_tipo === 'video') && (
+                            {(comunicado.midia_tipo === 'video' || (!comunicado.midia_tipo && comunicado.video_url)) && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-mono text-brand-muted bg-brand-dark/50 px-1.5 py-0.5 rounded border border-brand-border">
                                 <VideoIcon size={11} className="text-brand-primary" /> Vídeo
                               </span>

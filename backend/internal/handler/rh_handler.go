@@ -632,8 +632,28 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 		videoURL = &t
 	}
 	if in.MidiaTipo != nil && strings.TrimSpace(*in.MidiaTipo) != "" {
-		t := strings.TrimSpace(*in.MidiaTipo)
+		t := strings.ToLower(strings.TrimSpace(*in.MidiaTipo))
 		midiaTipo = &t
+		switch *midiaTipo {
+		case "imagem":
+			if imgURL == nil && audioURL != nil {
+				imgURL = audioURL
+				audioURL = nil
+			} else if imgURL == nil && videoURL != nil {
+				imgURL = videoURL
+				videoURL = nil
+			}
+		case "audio":
+			if audioURL == nil && videoURL != nil {
+				audioURL = videoURL
+			}
+			videoURL = nil
+		case "video":
+			if videoURL == nil && audioURL != nil {
+				videoURL = audioURL
+			}
+			audioURL = nil
+		}
 	}
 
 	if current != nil && current.Role != models.RoleAdmin && current.Role != models.RoleRH && (in.UsuarioID == nil || *in.UsuarioID == 0) && (in.DepartamentoID == nil || *in.DepartamentoID == 0) {
@@ -728,29 +748,28 @@ func (h *RHHandler) UploadComunicadoMedia(c *gin.Context) {
 		return
 	}
 
+	clientTipo := strings.ToLower(strings.TrimSpace(c.PostForm("midia_tipo")))
+	contentType := fileHeader.Header.Get("Content-Type")
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	mediaTipo := ""
-	if ext == ".mp4" || ext == ".webm" || ext == ".mov" || ext == ".mkv" || ext == ".avi" {
-		mediaTipo = "video"
-	} else if ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".weba" {
+
+	if clientTipo == "audio" || clientTipo == "video" || clientTipo == "imagem" {
+		mediaTipo = clientTipo
+	} else if strings.HasPrefix(contentType, "audio/") {
 		mediaTipo = "audio"
+	} else if strings.HasPrefix(contentType, "video/") {
+		mediaTipo = "video"
+	} else if strings.HasPrefix(contentType, "image/") {
+		mediaTipo = "imagem"
+	} else if ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".weba" || ext == ".flac" {
+		mediaTipo = "audio"
+	} else if ext == ".mp4" || ext == ".webm" || ext == ".mov" || ext == ".mkv" || ext == ".avi" {
+		mediaTipo = "video"
 	} else if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".gif" || ext == ".svg" {
 		mediaTipo = "imagem"
 	} else {
-		contentType := fileHeader.Header.Get("Content-Type")
-		if strings.HasPrefix(contentType, "audio/") {
-			mediaTipo = "audio"
-			ext = ".webm"
-		} else if strings.HasPrefix(contentType, "video/") {
-			mediaTipo = "video"
-			ext = ".webm"
-		} else if strings.HasPrefix(contentType, "image/") {
-			mediaTipo = "imagem"
-			ext = ".png"
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de arquivo não suportado. Envie imagens, áudios ou vídeos."})
-			return
-		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de arquivo não suportado. Envie imagens, áudios ou vídeos."})
+		return
 	}
 
 	uploadDir := filepath.Join("uploads", "rh_comunicados")

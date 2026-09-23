@@ -44,9 +44,13 @@ export const rhApi = {
     await apiClient.put(`/rh/colaboradores/${userId}/monitoramento`, { show_on_monitoring: showOnMonitoring });
   },
   deleteStatus: async (id: number): Promise<void> => { await apiClient.delete(`/rh/status/${id}`); },
-  uploadComunicadoMedia: async (file: File | Blob, filename?: string): Promise<{ url: string; midia_tipo: string; filename: string }> => {
+  uploadComunicadoMedia: async (file: File | Blob, filename?: string, midiaTipo?: string): Promise<{ url: string; midia_tipo: string; filename: string }> => {
     const formData = new FormData();
-    formData.append('file', file, filename || (file instanceof File ? file.name : 'media_record.webm'));
+    const resolvedName = filename || (file instanceof File ? file.name : (midiaTipo === 'audio' ? 'gravacao_audio.weba' : midiaTipo === 'video' ? 'gravacao_video.webm' : 'media_record.webm'));
+    formData.append('file', file, resolvedName);
+    if (midiaTipo) {
+      formData.append('midia_tipo', midiaTipo);
+    }
     const response = await apiClient.post<{ url: string; midia_tipo: string; filename: string }>('/rh/comunicados/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

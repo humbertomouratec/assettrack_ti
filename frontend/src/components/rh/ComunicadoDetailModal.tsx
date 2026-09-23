@@ -19,9 +19,21 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
   const [marking, setMarking] = useState(false);
   const isUpdate = comunicado.titulo.startsWith('Atualização do RH:');
 
-  const imageUrl = toApiFileUrl(comunicado.imagem_url);
-  const audioUrl = toApiFileUrl(comunicado.audio_url);
-  const videoUrl = toApiFileUrl(comunicado.video_url);
+  const isAudioType = comunicado.midia_tipo === 'audio';
+  const isVideoType = comunicado.midia_tipo === 'video';
+  const isImageType = comunicado.midia_tipo === 'imagem';
+
+  const resolvedImageUrl = isImageType
+    ? (toApiFileUrl(comunicado.imagem_url) || toApiFileUrl(comunicado.video_url) || toApiFileUrl(comunicado.audio_url))
+    : (!comunicado.midia_tipo ? toApiFileUrl(comunicado.imagem_url) : null);
+
+  const resolvedAudioUrl = isAudioType
+    ? (toApiFileUrl(comunicado.audio_url) || toApiFileUrl(comunicado.video_url))
+    : (!comunicado.midia_tipo ? toApiFileUrl(comunicado.audio_url) : null);
+
+  const resolvedVideoUrl = isVideoType
+    ? (toApiFileUrl(comunicado.video_url) || toApiFileUrl(comunicado.audio_url))
+    : (!comunicado.midia_tipo ? toApiFileUrl(comunicado.video_url) : null);
 
   const handleMark = async () => {
     if (!onMarkRead || isRead) return;
@@ -115,7 +127,7 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
           </div>
 
           {/* Media Attachments */}
-          {imageUrl && (
+          {resolvedImageUrl && (
             <div className="space-y-1.5 rounded-xl border border-brand-border bg-brand-dark/50 p-3">
               <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-brand-muted mb-2">
                 <ImageIcon size={14} className="text-brand-primary" />
@@ -123,7 +135,7 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
               </div>
               <div className="overflow-hidden rounded-lg bg-black/60 text-center">
                 <img
-                  src={imageUrl}
+                  src={resolvedImageUrl}
                   alt={comunicado.titulo}
                   className="mx-auto max-h-80 w-auto object-contain rounded-lg shadow-sm"
                 />
@@ -131,17 +143,17 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
             </div>
           )}
 
-          {audioUrl && (
+          {resolvedAudioUrl && (
             <div className="space-y-2 rounded-xl border border-brand-border bg-brand-dark/50 p-4">
               <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-brand-text mb-1">
                 <Volume2 size={16} className="text-brand-primary" />
                 Mensagem de Áudio
               </div>
-              <audio controls src={audioUrl} className="w-full h-11 rounded" autoPlay={false} />
+              <audio controls src={resolvedAudioUrl} className="w-full h-11 rounded" autoPlay={false} />
             </div>
           )}
 
-          {videoUrl && (
+          {resolvedVideoUrl && (
             <div className="space-y-2 rounded-xl border border-brand-border bg-brand-dark/50 p-3">
               <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-brand-text mb-1.5">
                 <VideoIcon size={16} className="text-brand-primary" />
@@ -151,7 +163,7 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
                 <video
                   controls
                   playsInline
-                  src={videoUrl}
+                  src={resolvedVideoUrl}
                   className="w-full max-h-80 rounded-lg bg-black object-contain shadow-inner"
                 />
               </div>
