@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/assettrack/backend/internal/middleware"
 	"github.com/assettrack/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,8 @@ func (h *AIHandler) Chat(c *gin.Context) {
 		return
 	}
 
-	response, err := h.aiService.Chat(c.Request.Context(), req.Messages)
+	currentUser := middleware.GetCurrentUser(c)
+	response, err := h.aiService.Chat(c.Request.Context(), currentUser, req.Messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -34,3 +36,4 @@ func (h *AIHandler) Chat(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"response": response})
 }
+
