@@ -27,13 +27,19 @@ func (r *RHRepository) DeleteStatus(id uint) error                 { return r.db
 
 func (r *RHRepository) ListComunicados() ([]models.RHComunicado, error) {
 	var comunicados []models.RHComunicado
-	err := r.db.Preload("Usuario").Preload("CriadoPor").Order("inicio desc, created_at desc").Find(&comunicados).Error
+	err := r.db.Preload("Usuario").Preload("Departamento").Preload("CriadoPor").Order("inicio desc, created_at desc").Find(&comunicados).Error
 	return comunicados, err
 }
 
-func (r *RHRepository) ListComunicadosForUser(userID uint, now time.Time) ([]models.RHComunicado, error) {
+func (r *RHRepository) ListComunicadosForUser(userID uint, departamentoID *uint, now time.Time) ([]models.RHComunicado, error) {
 	var comunicados []models.RHComunicado
-	err := r.db.Preload("CriadoPor").Where("ativo = true AND inicio <= ? AND (fim IS NULL OR fim >= ?) AND (usuario_id IS NULL OR usuario_id = ?)", now, now, userID).Order("inicio desc").Find(&comunicados).Error
+	query := r.db.Preload("CriadoPor").Preload("Departamento").Where("ativo = true AND inicio <= ? AND (fim IS NULL OR fim >= ?)", now, now)
+	if departamentoID != nil && *departamentoID > 0 {
+		query = query.Where("( (usuario_id IS NULL AND departamento_id IS NULL) OR usuario_id = ? OR departamento_id = ? )", userID, *departamentoID)
+	} else {
+		query = query.Where("( (usuario_id IS NULL AND departamento_id IS NULL) OR usuario_id = ? )", userID)
+	}
+	err := query.Order("inicio desc").Find(&comunicados).Error
 	return comunicados, err
 }
 

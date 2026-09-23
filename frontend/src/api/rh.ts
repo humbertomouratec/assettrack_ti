@@ -44,7 +44,26 @@ export const rhApi = {
     await apiClient.put(`/rh/colaboradores/${userId}/monitoramento`, { show_on_monitoring: showOnMonitoring });
   },
   deleteStatus: async (id: number): Promise<void> => { await apiClient.delete(`/rh/status/${id}`); },
-  createComunicado: async (data: { usuario_id?: number; titulo: string; mensagem: string; inicio?: string; fim?: string }): Promise<RHComunicado> =>
+  uploadComunicadoMedia: async (file: File | Blob, filename?: string): Promise<{ url: string; midia_tipo: string; filename: string }> => {
+    const formData = new FormData();
+    formData.append('file', file, filename || (file instanceof File ? file.name : 'media_record.webm'));
+    const response = await apiClient.post<{ url: string; midia_tipo: string; filename: string }>('/rh/comunicados/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+  createComunicado: async (data: {
+    usuario_id?: number;
+    departamento_id?: number;
+    titulo: string;
+    mensagem: string;
+    inicio?: string;
+    fim?: string;
+    imagem_url?: string;
+    audio_url?: string;
+    video_url?: string;
+    midia_tipo?: string;
+  }): Promise<RHComunicado> =>
     (await apiClient.post<RHComunicado>('/rh/comunicados', data)).data,
   deleteComunicado: async (id: number): Promise<void> => { await apiClient.delete(`/rh/comunicados/${id}`); },
   myPortal: async (): Promise<MyRHPortal> => (await apiClient.get<MyRHPortal>('/profile/rh')).data,

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { rhApi } from '../api/rh';
 import { apiClient as api, toApiFileUrl } from '../api/client';
-import type { TermoResponsabilidade, RHControlResponse, RHStatusType, RHStatusRecord } from '../types/rh';
+import type { TermoResponsabilidade, RHControlResponse, RHStatusType, RHStatusRecord, RHComunicado } from '../types/rh';
 import type { Solicitacao } from '../types/transaction';
 import type { User } from '../types/user';
-import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network, X, Filter } from 'lucide-react';
+import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network, X, Filter, Building2, Volume2, Video as VideoIcon, Image as ImageIcon, Loader2, User as UserIcon } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { MediaAttachmentInput } from '../components/rh/MediaAttachmentInput';
+import { ComunicadoDetailModal } from '../components/rh/ComunicadoDetailModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -100,6 +102,13 @@ export const RHPage: React.FC = () => {
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [newDateInput, setNewDateInput] = useState(dateInputValue());
   const [noticeForm, setNoticeForm] = useState({ usuario_id: '', titulo: '', mensagem: '', inicio: dateInputValue(), fim: '' });
+  const [noticeTargetType, setNoticeTargetType] = useState<'todos' | 'setor' | 'individual'>('todos');
+  const [noticeSectorId, setNoticeSectorId] = useState('');
+  const [noticeMediaTipo, setNoticeMediaTipo] = useState<'imagem' | 'audio' | 'video' | null>(null);
+  const [noticeMediaFile, setNoticeMediaFile] = useState<File | Blob | null>(null);
+  const [noticeMediaPreview, setNoticeMediaPreview] = useState<string | null>(null);
+  const [sendingNotice, setSendingNotice] = useState(false);
+  const [previewComunicado, setPreviewComunicado] = useState<RHComunicado | null>(null);
   const [calendarSector, setCalendarSector] = useState('');
   const [exportSector, setExportSector] = useState('');
   const [exportPeriod, setExportPeriod] = useState<'week' | 'month'>('week');
@@ -239,11 +248,60 @@ export const RHPage: React.FC = () => {
 
   const saveNotice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (noticeTargetType === 'setor' && !noticeSectorId) {
+      alert('Selecione o setor/departamento de destino.');
+      return;
+    }
+    if (noticeTargetType === 'individual' && !noticeForm.usuario_id) {
+      alert('Selecione o colaborador de destino.');
+      return;
+    }
+
+    setSendingNotice(true);
     try {
-      await rhApi.createComunicado({ usuario_id: noticeForm.usuario_id ? Number(noticeForm.usuario_id) : undefined, titulo: noticeForm.titulo, mensagem: noticeForm.mensagem, inicio: noticeForm.inicio || undefined, fim: noticeForm.fim || undefined });
+      let imageUrl: string | undefined;
+      let audioUrl: string | undefined;
+      let videoUrl: string | undefined;
+      let midiaTipo: string | undefined = noticeMediaTipo || undefined;
+
+      if (noticeMediaFile) {
+        const uploaded = await rhApi.uploadComunicadoMedia(noticeMediaFile);
+        if (uploaded.midia_tipo === 'imagem') {
+          imageUrl = uploaded.url;
+        } else if (uploaded.midia_tipo === 'audio') {
+          audioUrl = uploaded.url;
+        } else if (uploaded.midia_tipo === 'video') {
+          videoUrl = uploaded.url;
+        }
+        midiaTipo = uploaded.midia_tipo;
+      }
+
+      await rhApi.createComunicado({
+        usuario_id: noticeTargetType === 'individual' && noticeForm.usuario_id ? Number(noticeForm.usuario_id) : undefined,
+        departamento_id: noticeTargetType === 'setor' && noticeSectorId ? Number(noticeSectorId) : undefined,
+        titulo: noticeForm.titulo,
+        mensagem: noticeForm.mensagem,
+        inicio: noticeForm.inicio || undefined,
+        fim: noticeForm.fim || undefined,
+        imagem_url: imageUrl,
+        audio_url: audioUrl,
+        video_url: videoUrl,
+        midia_tipo: midiaTipo,
+      });
+
       setNoticeForm({ usuario_id: '', titulo: '', mensagem: '', inicio: dateInputValue(), fim: '' });
+      setNoticeTargetType('todos');
+      setNoticeSectorId('');
+      setNoticeMediaTipo(null);
+      setNoticeMediaFile(null);
+      setNoticeMediaPreview(null);
+      alert('Comunicado publicado com sucesso!');
       await fetchData();
-    } catch (err: any) { alert(err.response?.data?.error || 'Não foi possível enviar o comunicado.'); }
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Não foi possível enviar o comunicado.');
+    } finally {
+      setSendingNotice(false);
+    }
   };
 
   const exportSectorOptions = useMemo(() => {
@@ -776,15 +834,191 @@ export const RHPage: React.FC = () => {
             </form>
 
             <form onSubmit={saveNotice} className="border border-brand-border bg-brand-card p-5 space-y-4">
-              <div className="flex items-start gap-3"><div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary"><Megaphone size={18} /></div><div><div className="text-base font-bold text-brand-text">Novo comunicado</div><p className="mt-0.5 text-xs text-brand-muted">{isRHAdmin ? 'Envie uma mensagem individual ou para toda a empresa.' : 'Envie comunicado individual ou para todos os subordinados da sua equipe.'}</p></div></div>
-              <select value={noticeForm.usuario_id} onChange={e => setNoticeForm({ ...noticeForm, usuario_id: e.target.value })} className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text">
-                <option value="">{isRHAdmin ? 'Todos os colaboradores' : 'Todos da minha equipe'}</option>
-                {control.colaboradores.filter(c => c.usuario.is_active).map(c => <option key={c.usuario.id} value={c.usuario.id}>{c.usuario.nome}</option>)}
-              </select>
-              <input required placeholder="Título do comunicado" value={noticeForm.titulo} onChange={e => setNoticeForm({ ...noticeForm, titulo: e.target.value })} className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" />
-              <textarea required placeholder="Mensagem para o colaborador" value={noticeForm.mensagem} onChange={e => setNoticeForm({ ...noticeForm, mensagem: e.target.value })} className="w-full min-h-20 bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" />
-              <div className="grid grid-cols-2 gap-3"><input type="date" value={noticeForm.inicio} onChange={e => setNoticeForm({ ...noticeForm, inicio: e.target.value })} className="bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" /><input type="date" value={noticeForm.fim} onChange={e => setNoticeForm({ ...noticeForm, fim: e.target.value })} className="bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text" title="Expira em (opcional)" /></div>
-              <button className="bg-brand-primary text-brand-dark font-bold font-mono px-4 py-2.5 uppercase tracking-wider text-xs">Enviar comunicado</button>
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
+                  <Megaphone size={18} />
+                </div>
+                <div>
+                  <div className="text-base font-bold text-brand-text">Novo comunicado</div>
+                  <p className="mt-0.5 text-xs text-brand-muted">
+                    {isRHAdmin
+                      ? 'Envie comunicados gerais, por departamento/setor ou mensagens individuais com fotos, áudios e vídeos.'
+                      : 'Envie comunicados para sua equipe configurada, por setor ou individualmente.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Seletor de Destinatário */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-mono uppercase text-brand-muted">
+                  Destinatários <span className="text-red-400">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoticeTargetType('todos');
+                      setNoticeSectorId('');
+                      setNoticeForm({ ...noticeForm, usuario_id: '' });
+                    }}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-all ${
+                      noticeTargetType === 'todos'
+                        ? 'border-brand-primary bg-brand-primary/15 text-brand-primary font-bold shadow-sm'
+                        : 'border-brand-border bg-brand-dark/50 text-brand-muted hover:text-brand-text'
+                    }`}
+                  >
+                    <Megaphone size={14} />
+                    <span>{isRHAdmin ? 'Toda a Empresa' : 'Toda a Equipe'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoticeTargetType('setor');
+                      setNoticeForm({ ...noticeForm, usuario_id: '' });
+                    }}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-all ${
+                      noticeTargetType === 'setor'
+                        ? 'border-brand-primary bg-brand-primary/15 text-brand-primary font-bold shadow-sm'
+                        : 'border-brand-border bg-brand-dark/50 text-brand-muted hover:text-brand-text'
+                    }`}
+                  >
+                    <Building2 size={14} />
+                    <span>Por Setor</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoticeTargetType('individual');
+                      setNoticeSectorId('');
+                    }}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-all ${
+                      noticeTargetType === 'individual'
+                        ? 'border-brand-primary bg-brand-primary/15 text-brand-primary font-bold shadow-sm'
+                        : 'border-brand-border bg-brand-dark/50 text-brand-muted hover:text-brand-text'
+                    }`}
+                  >
+                    <UserIcon size={14} />
+                    <span>Individual</span>
+                  </button>
+                </div>
+
+                {noticeTargetType === 'setor' && (
+                  <div className="pt-1">
+                    <select
+                      required
+                      value={noticeSectorId}
+                      onChange={e => setNoticeSectorId(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    >
+                      <option value="">Selecione o setor/departamento...</option>
+                      {statusSectorOptions.map(sector => (
+                        <option key={sector.id} value={sector.id}>
+                          {sector.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {noticeTargetType === 'individual' && (
+                  <div className="pt-1">
+                    <select
+                      required
+                      value={noticeForm.usuario_id}
+                      onChange={e => setNoticeForm({ ...noticeForm, usuario_id: e.target.value })}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    >
+                      <option value="">Selecione o colaborador...</option>
+                      {control.colaboradores.filter(c => c.usuario.is_active).map(c => (
+                        <option key={c.usuario.id} value={c.usuario.id}>
+                          {c.usuario.nome} {c.usuario.departamento?.nome ? `— ${c.usuario.departamento.nome}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                  Título do Comunicado <span className="text-red-400">*</span>
+                </label>
+                <input
+                  required
+                  placeholder="Ex: Treinamento de Segurança, Aviso Geral, Folga Coletiva..."
+                  value={noticeForm.titulo}
+                  onChange={e => setNoticeForm({ ...noticeForm, titulo: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                  Mensagem / Instruções <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  required
+                  placeholder="Digite a mensagem completa do comunicado..."
+                  value={noticeForm.mensagem}
+                  onChange={e => setNoticeForm({ ...noticeForm, mensagem: e.target.value })}
+                  className="w-full min-h-24 bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+
+              {/* Anexo de Mídia (Imagem, Gravação de Áudio, Gravação de Vídeo / Upload) */}
+              <MediaAttachmentInput
+                mediaTipo={noticeMediaTipo}
+                mediaFile={noticeMediaFile}
+                mediaPreviewUrl={noticeMediaPreview}
+                onChange={(tipo, file, preview) => {
+                  setNoticeMediaTipo(tipo);
+                  setNoticeMediaFile(file);
+                  setNoticeMediaPreview(preview);
+                }}
+                disabled={sendingNotice}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Início da vigência</label>
+                  <input
+                    type="date"
+                    value={noticeForm.inicio}
+                    onChange={e => setNoticeForm({ ...noticeForm, inicio: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-brand-muted mb-1">Expira em (opcional)</label>
+                  <input
+                    type="date"
+                    value={noticeForm.fim}
+                    onChange={e => setNoticeForm({ ...noticeForm, fim: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded"
+                    title="Expira em (opcional)"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={sendingNotice || !noticeForm.titulo.trim() || !noticeForm.mensagem.trim()}
+                className="inline-flex items-center justify-center gap-2 w-full bg-brand-primary text-brand-dark font-bold font-mono px-4 py-2.5 uppercase tracking-wider text-xs rounded hover:bg-brand-primary/90 transition-colors disabled:opacity-50"
+              >
+                {sendingNotice ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Publicando comunicado...</span>
+                  </>
+                ) : (
+                  <>
+                    <Megaphone size={15} />
+                    <span>Publicar Comunicado</span>
+                  </>
+                )}
+              </button>
             </form>
           </div>
 
@@ -829,7 +1063,76 @@ export const RHPage: React.FC = () => {
 
           {(control.status.length > 0 || control.comunicados.length > 0) && <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <div className="border border-brand-border bg-brand-card"><div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><Clock3 size={16} className="text-brand-primary" /> Agenda de RH</div><div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">{control.status.slice(0, 20).map(s => <div className="p-3 flex justify-between gap-3" key={s.id}><div><span className="text-brand-text">{s.usuario?.nome || 'Colaborador'}</span><span className="ml-2 text-xs text-brand-muted">{new Date(s.inicio).toLocaleDateString('pt-BR')}{s.fim ? ` até ${new Date(s.fim).toLocaleDateString('pt-BR')}` : ''}</span><p className="text-xs text-brand-muted m-0 mt-1">{s.observacao || (s.horas ? `${s.horas}h registradas` : '')}</p></div><div className="flex gap-2 items-start"><span className={`text-[10px] font-mono uppercase px-2 py-1 border ${employeeStatus[s.tipo].className}`}>{employeeStatus[s.tipo].label}</span><button type="button" title="Remover registro" onClick={() => action(() => rhApi.deleteStatus(s.id), 'Remover este registro de calendário?')} className="text-red-400"><XCircle size={16} /></button></div></div>)}</div></div>
-            <div className="border border-brand-border bg-brand-card"><div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><MessageSquareText size={16} className="text-brand-primary" /> Comunicados enviados</div><div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">{control.comunicados.slice(0, 20).map(n => <div className="p-3 flex justify-between gap-3" key={n.id}><div><span className="text-brand-text">{n.titulo}</span><span className="ml-2 text-xs text-brand-muted">{n.usuario?.nome || 'Todos os colaboradores'}</span><p className="text-xs text-brand-muted m-0 mt-1">{n.mensagem}</p><span className="mt-1 block text-[10px] text-brand-muted">Enviado por {n.criado_por?.nome || 'RH'}</span></div><button type="button" title="Remover comunicado" onClick={() => action(() => rhApi.deleteComunicado(n.id), 'Remover este comunicado?')} className="text-red-400 h-fit"><XCircle size={16} /></button></div>)}</div></div>
+            <div className="border border-brand-border bg-brand-card">
+              <div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text">
+                <MessageSquareText size={16} className="text-brand-primary" /> Comunicados enviados
+              </div>
+              <div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">
+                {control.comunicados.slice(0, 20).map(n => (
+                  <div className="p-3 flex justify-between gap-3 hover:bg-brand-dark/20 transition-colors" key={n.id}>
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreviewComunicado(n)}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-brand-text text-sm hover:underline">{n.titulo}</span>
+                        {n.departamento?.nome ? (
+                          <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 flex items-center gap-1">
+                            <Building2 size={10} /> {n.departamento.nome}
+                          </span>
+                        ) : n.usuario?.nome ? (
+                          <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 flex items-center gap-1">
+                            <UserIcon size={10} /> {n.usuario.nome}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-brand-primary/10 border border-brand-primary/30 text-brand-primary">
+                            Geral
+                          </span>
+                        )}
+
+                        {/* Badges de mídia */}
+                        {(n.imagem_url || n.midia_tipo === 'imagem') && (
+                          <span className="text-[10px] text-brand-muted flex items-center gap-0.5 bg-brand-dark/60 px-1 py-0.5 rounded border border-brand-border" title="Possui imagem">
+                            <ImageIcon size={11} className="text-brand-primary" /> Imagem
+                          </span>
+                        )}
+                        {(n.audio_url || n.midia_tipo === 'audio') && (
+                          <span className="text-[10px] text-brand-muted flex items-center gap-0.5 bg-brand-dark/60 px-1 py-0.5 rounded border border-brand-border" title="Possui áudio">
+                            <Volume2 size={11} className="text-brand-primary" /> Áudio
+                          </span>
+                        )}
+                        {(n.video_url || n.midia_tipo === 'video') && (
+                          <span className="text-[10px] text-brand-muted flex items-center gap-0.5 bg-brand-dark/60 px-1 py-0.5 rounded border border-brand-border" title="Possui vídeo">
+                            <VideoIcon size={11} className="text-brand-primary" /> Vídeo
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-brand-muted m-0 mt-1 line-clamp-2">{n.mensagem}</p>
+                      <span className="mt-1 block text-[10px] text-brand-muted">
+                        Enviado por {n.criado_por?.nome || 'RH'} · {new Date(n.inicio).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewComunicado(n)}
+                        className="text-xs font-mono text-brand-primary hover:underline"
+                        title="Ver detalhes do comunicado"
+                      >
+                        Ver
+                      </button>
+                      <button
+                        type="button"
+                        title="Remover comunicado"
+                        onClick={() => action(() => rhApi.deleteComunicado(n.id), 'Remover este comunicado?')}
+                        className="text-red-400 h-fit"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>}
         </>
       )}
@@ -1007,6 +1310,15 @@ export const RHPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Comunicado */}
+      {previewComunicado && (
+        <ComunicadoDetailModal
+          comunicado={previewComunicado}
+          isRead={true}
+          onClose={() => setPreviewComunicado(null)}
+        />
       )}
     </div>
   );

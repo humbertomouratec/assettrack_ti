@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -98,11 +100,16 @@ type rhStatusInput struct {
 }
 
 type rhComunicadoInput struct {
-	UsuarioID *uint  `json:"usuario_id"`
-	Titulo    string `json:"titulo"`
-	Mensagem  string `json:"mensagem"`
-	Inicio    string `json:"inicio"`
-	Fim       string `json:"fim"`
+	UsuarioID      *uint   `json:"usuario_id"`
+	DepartamentoID *uint   `json:"departamento_id"`
+	Titulo         string  `json:"titulo"`
+	Mensagem       string  `json:"mensagem"`
+	Inicio         string  `json:"inicio"`
+	Fim            string  `json:"fim"`
+	ImagemURL      *string `json:"imagem_url"`
+	AudioURL       *string `json:"audio_url"`
+	VideoURL       *string `json:"video_url"`
+	MidiaTipo      *string `json:"midia_tipo"`
 }
 
 type rhMonitoringInput struct {
@@ -286,6 +293,10 @@ func (h *RHHandler) filterComunicadosForCurrent(c *gin.Context, comunicados []mo
 	filtered := make([]models.RHComunicado, 0)
 	for _, comunicado := range comunicados {
 		if comunicado.UsuarioID != nil && allowed[*comunicado.UsuarioID] {
+			filtered = append(filtered, comunicado)
+		} else if comunicado.DepartamentoID != nil && current != nil && current.DepartamentoID != nil && *comunicado.DepartamentoID == *current.DepartamentoID {
+			filtered = append(filtered, comunicado)
+		} else if comunicado.UsuarioID == nil && comunicado.DepartamentoID == nil {
 			filtered = append(filtered, comunicado)
 		}
 	}
@@ -560,7 +571,8 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Título e mensagem são obrigatórios"})
 		return
 	}
-	if in.UsuarioID != nil {
+	current := middleware.GetCurrentUser(c)
+	if in.UsuarioID != nil && *in.UsuarioID > 0 {
 		target, err := h.userRepo.GetByID(*in.UsuarioID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Colaborador não encontrado"})
@@ -570,7 +582,13 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Você só pode comunicar sua equipe configurada"})
 			return
 		}
-	} else if current := middleware.GetCurrentUser(c); current != nil && current.Role != models.RoleAdmin && current.Role != models.RoleRH {
+	} else if in.DepartamentoID != nil && *in.DepartamentoID > 0 {
+		var dept models.Departamento
+		if err := h.userRepo.DB().First(&dept, *in.DepartamentoID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Setor não encontrado"})
+			return
+		}
+	} else if current != nil && current.Role != models.RoleAdmin && current.Role != models.RoleRH {
 		recipients, err := h.managedRecipients(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -599,8 +617,26 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "A data final deve ser posterior ao início"})
 		return
 	}
-	current := middleware.GetCurrentUser(c)
-	if current != nil && current.Role != models.RoleAdmin && current.Role != models.RoleRH && in.UsuarioID == nil {
+
+	var imgURL, audioURL, videoURL, midiaTipo *string
+	if in.ImagemURL != nil && strings.TrimSpace(*in.ImagemURL) != "" {
+		t := strings.TrimSpace(*in.ImagemURL)
+		imgURL = &t
+	}
+	if in.AudioURL != nil && strings.TrimSpace(*in.AudioURL) != "" {
+		t := strings.TrimSpace(*in.AudioURL)
+		audioURL = &t
+	}
+	if in.VideoURL != nil && strings.TrimSpace(*in.VideoURL) != "" {
+		t := strings.TrimSpace(*in.VideoURL)
+		videoURL = &t
+	}
+	if in.MidiaTipo != nil && strings.TrimSpace(*in.MidiaTipo) != "" {
+		t := strings.TrimSpace(*in.MidiaTipo)
+		midiaTipo = &t
+	}
+
+	if current != nil && current.Role != models.RoleAdmin && current.Role != models.RoleRH && (in.UsuarioID == nil || *in.UsuarioID == 0) && (in.DepartamentoID == nil || *in.DepartamentoID == 0) {
 		recipients, err := h.managedRecipients(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -609,7 +645,19 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 		created := make([]models.RHComunicado, 0, len(recipients))
 		for _, recipient := range recipients {
 			recipientID := recipient.ID
-			comunicado := models.RHComunicado{UsuarioID: &recipientID, Titulo: strings.TrimSpace(in.Titulo), Mensagem: strings.TrimSpace(in.Mensagem), Inicio: *inicio, Fim: fim, Ativo: true, CriadoPorID: current.ID}
+			comunicado := models.RHComunicado{
+				UsuarioID:   &recipientID,
+				Titulo:      strings.TrimSpace(in.Titulo),
+				Mensagem:    strings.TrimSpace(in.Mensagem),
+				Inicio:      *inicio,
+				Fim:         fim,
+				Ativo:       true,
+				ImagemURL:   imgURL,
+				AudioURL:    audioURL,
+				VideoURL:    videoURL,
+				MidiaTipo:   midiaTipo,
+				CriadoPorID: current.ID,
+			}
 			if err := h.rhRepo.CreateComunicado(&comunicado); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -619,7 +667,21 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 		c.JSON(http.StatusCreated, gin.H{"message": "Comunicado enviado para a equipe", "quantidade": len(created), "comunicados": created})
 		return
 	}
-	comunicado := &models.RHComunicado{UsuarioID: in.UsuarioID, Titulo: strings.TrimSpace(in.Titulo), Mensagem: strings.TrimSpace(in.Mensagem), Inicio: *inicio, Fim: fim, Ativo: true, CriadoPorID: current.ID}
+
+	comunicado := &models.RHComunicado{
+		UsuarioID:      in.UsuarioID,
+		DepartamentoID: in.DepartamentoID,
+		Titulo:         strings.TrimSpace(in.Titulo),
+		Mensagem:       strings.TrimSpace(in.Mensagem),
+		Inicio:         *inicio,
+		Fim:            fim,
+		Ativo:          true,
+		ImagemURL:      imgURL,
+		AudioURL:       audioURL,
+		VideoURL:       videoURL,
+		MidiaTipo:      midiaTipo,
+		CriadoPorID:    current.ID,
+	}
 	if err := h.rhRepo.CreateComunicado(comunicado); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -652,6 +714,70 @@ func (h *RHHandler) DeleteComunicado(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Comunicado removido"})
 }
 
+// UploadComunicadoMedia handles image, audio and video uploads or recordings for RH comunicados
+func (h *RHHandler) UploadComunicadoMedia(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nenhum arquivo enviado"})
+		return
+	}
+
+	// 100MB max limit for videos/audio/images
+	if fileHeader.Size > 100*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Arquivo excede o limite máximo de 100MB"})
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	mediaTipo := ""
+	if ext == ".mp4" || ext == ".webm" || ext == ".mov" || ext == ".mkv" || ext == ".avi" {
+		mediaTipo = "video"
+	} else if ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".weba" {
+		mediaTipo = "audio"
+	} else if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".gif" || ext == ".svg" {
+		mediaTipo = "imagem"
+	} else {
+		contentType := fileHeader.Header.Get("Content-Type")
+		if strings.HasPrefix(contentType, "audio/") {
+			mediaTipo = "audio"
+			ext = ".webm"
+		} else if strings.HasPrefix(contentType, "video/") {
+			mediaTipo = "video"
+			ext = ".webm"
+		} else if strings.HasPrefix(contentType, "image/") {
+			mediaTipo = "imagem"
+			ext = ".png"
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de arquivo não suportado. Envie imagens, áudios ou vídeos."})
+			return
+		}
+	}
+
+	uploadDir := filepath.Join("uploads", "rh_comunicados")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar diretório de uploads"})
+		return
+	}
+
+	filename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fileHeader.Filename))
+	if !strings.HasSuffix(filename, ext) && ext != "" {
+		filename += ext
+	}
+	dst := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(fileHeader, dst); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao salvar arquivo"})
+		return
+	}
+
+	publicURL := fmt.Sprintf("/uploads/rh_comunicados/%s", filename)
+	c.JSON(http.StatusOK, gin.H{
+		"url":        publicURL,
+		"midia_tipo": mediaTipo,
+		"filename":   filename,
+	})
+}
+
 // MyPortal exposes only the authenticated user's HR calendar and messages.
 func (h *RHHandler) MyPortal(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
@@ -661,7 +787,7 @@ func (h *RHHandler) MyPortal(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	comunicados, err := h.rhRepo.ListComunicadosForUser(user.ID, now)
+	comunicados, err := h.rhRepo.ListComunicadosForUser(user.ID, user.DepartamentoID, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -693,7 +819,7 @@ func (h *RHHandler) MarkMyComunicadoRead(c *gin.Context) {
 		return
 	}
 	user := middleware.GetCurrentUser(c)
-	items, err := h.rhRepo.ListComunicadosForUser(user.ID, time.Now())
+	items, err := h.rhRepo.ListComunicadosForUser(user.ID, user.DepartamentoID, time.Now())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

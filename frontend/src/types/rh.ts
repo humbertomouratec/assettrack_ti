@@ -41,12 +41,18 @@ export interface RHStatusRecord {
 export interface RHComunicado {
   id: number;
   usuario_id?: number | null;
+  departamento_id?: number | null;
   titulo: string;
   mensagem: string;
   inicio: string;
   fim?: string | null;
   ativo: boolean;
+  imagem_url?: string | null;
+  audio_url?: string | null;
+  video_url?: string | null;
+  midia_tipo?: 'imagem' | 'audio' | 'video' | string | null;
   usuario?: { id: number; nome: string };
+  departamento?: { id: number; nome: string };
   criado_por?: { id: number; nome: string };
 }
 

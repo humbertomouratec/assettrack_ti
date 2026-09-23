@@ -39,21 +39,27 @@ type RHStatus struct {
 
 func (RHStatus) TableName() string { return "rh_status" }
 
-// RHComunicado is an individual or company-wide message, independently kept
+// RHComunicado is an individual, sector-wide or company-wide message, independently kept
 // from the general system notices so it can be shown only to its recipient.
 type RHComunicado struct {
-	ID          uint       `gorm:"primaryKey" json:"id"`
-	UsuarioID   *uint      `gorm:"column:usuario_id;index" json:"usuario_id"`
-	Titulo      string     `gorm:"not null" json:"titulo"`
-	Mensagem    string     `gorm:"type:text;not null" json:"mensagem"`
-	Inicio      time.Time  `gorm:"column:inicio;not null;index" json:"inicio"`
-	Fim         *time.Time `gorm:"column:fim;index" json:"fim"`
-	Ativo       bool       `gorm:"default:true" json:"ativo"`
-	CriadoPorID uint       `gorm:"column:criado_por_id;not null" json:"criado_por_id"`
-	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	ID             uint          `gorm:"primaryKey" json:"id"`
+	UsuarioID      *uint         `gorm:"column:usuario_id;index" json:"usuario_id"`
+	DepartamentoID *uint         `gorm:"column:departamento_id;index" json:"departamento_id"`
+	Titulo         string        `gorm:"not null" json:"titulo"`
+	Mensagem       string        `gorm:"type:text;not null" json:"mensagem"`
+	Inicio         time.Time     `gorm:"column:inicio;not null;index" json:"inicio"`
+	Fim            *time.Time    `gorm:"column:fim;index" json:"fim"`
+	Ativo          bool          `gorm:"default:true" json:"ativo"`
+	ImagemURL      *string       `gorm:"column:imagem_url;type:text" json:"imagem_url"`
+	AudioURL       *string       `gorm:"column:audio_url;type:text" json:"audio_url"`
+	VideoURL       *string       `gorm:"column:video_url;type:text" json:"video_url"`
+	MidiaTipo      *string       `gorm:"column:midia_tipo;type:varchar(20)" json:"midia_tipo"`
+	CriadoPorID    uint          `gorm:"column:criado_por_id;not null" json:"criado_por_id"`
+	CreatedAt      time.Time     `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
-	Usuario   *User `gorm:"foreignKey:UsuarioID" json:"usuario,omitempty"`
-	CriadoPor *User `gorm:"foreignKey:CriadoPorID" json:"criado_por,omitempty"`
+	Usuario      *User         `gorm:"foreignKey:UsuarioID" json:"usuario,omitempty"`
+	Departamento *Departamento `gorm:"foreignKey:DepartamentoID" json:"departamento,omitempty"`
+	CriadoPor    *User         `gorm:"foreignKey:CriadoPorID" json:"criado_por,omitempty"`
 }
 
 func (RHComunicado) TableName() string { return "rh_comunicados" }
