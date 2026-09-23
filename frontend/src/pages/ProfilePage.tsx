@@ -846,6 +846,22 @@ export const ProfilePage: React.FC = () => {
             await handleMarkComunicadoRead(selectedComunicado.comunicado.id);
             setSelectedComunicado(prev => prev ? { ...prev, lida: true } : null);
           }}
+          canManage={user?.role === 'admin' || user?.role === 'rh' || selectedComunicado.comunicado.criado_por?.id === user?.id}
+          onDeleteMedia={async () => {
+            await rhApi.deleteComunicadoMedia(selectedComunicado.comunicado.id);
+            setSelectedComunicado(prev => prev ? {
+              ...prev,
+              comunicado: {
+                ...prev.comunicado,
+                imagem_url: undefined,
+                audio_url: undefined,
+                video_url: undefined,
+                midia_tipo: undefined,
+              }
+            } : null);
+            const data = await rhApi.myPortal();
+            setRhPortal(data);
+          }}
         />
       )}
     </div>

@@ -441,6 +441,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			rh.POST("/comunicados", rhHandler.CreateComunicado)
 			rh.POST("/comunicados/upload", rhHandler.UploadComunicadoMedia)
 			rh.DELETE("/comunicados/:id", rhHandler.DeleteComunicado)
+			rh.DELETE("/comunicados/:id/midia", rhHandler.DeleteComunicadoMedia)
 			rh.GET("/solicitacoes/:id/modelo", rRH, rhHandler.GenerateTemplate)
 			rh.POST("/termos", rRH, rhHandler.Create)
 			rh.PUT("/termos/:id", rRH, rhHandler.Update)

@@ -709,6 +709,17 @@ func (h *RHHandler) CreateComunicado(c *gin.Context) {
 	c.JSON(http.StatusCreated, comunicado)
 }
 
+func deletePhysicalMedia(url string) {
+	if url == "" || !strings.HasPrefix(url, "/uploads/rh_comunicados/") {
+		return
+	}
+	filename := strings.TrimPrefix(url, "/uploads/rh_comunicados/")
+	if filename != "" && !strings.Contains(filename, "..") && !strings.Contains(filename, "/") && !strings.Contains(filename, "\\") {
+		targetPath := filepath.Join("uploads", "rh_comunicados", filename)
+		_ = os.Remove(targetPath)
+	}
+}
+
 func (h *RHHandler) DeleteComunicado(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -722,16 +733,72 @@ func (h *RHHandler) DeleteComunicado(c *gin.Context) {
 	}
 	current := middleware.GetCurrentUser(c)
 	if current == nil || (current.Role != models.RoleAdmin && current.Role != models.RoleRH) {
-		if comunicado.Usuario == nil || !h.visibleToCurrent(c, comunicado.Usuario) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Você só pode remover comunicados enviados para sua equipe configurada"})
+		if comunicado.CriadoPorID != current.ID && (comunicado.Usuario == nil || !h.visibleToCurrent(c, comunicado.Usuario)) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Você só pode remover comunicados criados por você ou enviados para sua equipe configurada"})
 			return
 		}
 	}
+
+	// Delete attached physical media files from server storage
+	if comunicado.ImagemURL != nil {
+		deletePhysicalMedia(*comunicado.ImagemURL)
+	}
+	if comunicado.AudioURL != nil {
+		deletePhysicalMedia(*comunicado.AudioURL)
+	}
+	if comunicado.VideoURL != nil {
+		deletePhysicalMedia(*comunicado.VideoURL)
+	}
+
 	if err := h.rhRepo.DeleteComunicado(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Comunicado removido"})
+	c.JSON(http.StatusOK, gin.H{"message": "Comunicado e arquivos de mídia removidos com sucesso"})
+}
+
+// DeleteComunicadoMedia removes only the attached audio/video/image from server storage and updates DB
+func (h *RHHandler) DeleteComunicadoMedia(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+	var comunicado models.RHComunicado
+	if err := h.userRepo.DB().Preload("Usuario").First(&comunicado, uint(id)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Comunicado não encontrado"})
+		return
+	}
+	current := middleware.GetCurrentUser(c)
+	if current == nil || (current.Role != models.RoleAdmin && current.Role != models.RoleRH) {
+		if comunicado.CriadoPorID != current.ID && (comunicado.Usuario == nil || !h.visibleToCurrent(c, comunicado.Usuario)) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Você só pode remover mídia de comunicados criados por você ou da sua equipe"})
+			return
+		}
+	}
+
+	// Remove physical files
+	if comunicado.ImagemURL != nil {
+		deletePhysicalMedia(*comunicado.ImagemURL)
+	}
+	if comunicado.AudioURL != nil {
+		deletePhysicalMedia(*comunicado.AudioURL)
+	}
+	if comunicado.VideoURL != nil {
+		deletePhysicalMedia(*comunicado.VideoURL)
+	}
+
+	if err := h.userRepo.DB().Model(&models.RHComunicado{}).Where("id = ?", comunicado.ID).Updates(map[string]interface{}{
+		"imagem_url": nil,
+		"audio_url":  nil,
+		"video_url":  nil,
+		"midia_tipo": nil,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Arquivos de mídia excluídos com sucesso do servidor"})
 }
 
 // UploadComunicadoMedia handles image, audio and video uploads or recordings for RH comunicados

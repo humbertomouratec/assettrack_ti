@@ -4,7 +4,7 @@ import { apiClient as api, toApiFileUrl } from '../api/client';
 import type { TermoResponsabilidade, RHControlResponse, RHStatusType, RHStatusRecord, RHComunicado } from '../types/rh';
 import type { Solicitacao } from '../types/transaction';
 import type { User } from '../types/user';
-import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network, X, Filter, Building2, Volume2, Video as VideoIcon, Image as ImageIcon, Loader2, User as UserIcon } from 'lucide-react';
+import { FileSignature, Printer, CheckCircle2, XCircle, Edit2, Plus, UserMinus, CalendarDays, MessageSquareText, UsersRound, Clock3, Download, ClipboardPlus, Megaphone, LayoutDashboard, Eye, EyeOff, Search, Network, X, Filter, Building2, Volume2, Video as VideoIcon, Image as ImageIcon, Loader2, User as UserIcon, HardDrive } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { MediaAttachmentInput } from '../components/rh/MediaAttachmentInput';
 import { ComunicadoDetailModal } from '../components/rh/ComunicadoDetailModal';
@@ -1116,20 +1116,30 @@ export const RHPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => setPreviewComunicado(n)}
-                        className="text-xs font-mono text-brand-primary hover:underline"
+                        className="text-xs font-mono text-brand-primary hover:underline px-1.5 py-1"
                         title="Ver detalhes do comunicado"
                       >
                         Ver
                       </button>
+                      {(n.imagem_url || n.audio_url || n.video_url || n.midia_tipo) && (
+                        <button
+                          type="button"
+                          title="Excluir apenas o arquivo de mídia (Liberar espaço em disco)"
+                          onClick={() => action(() => rhApi.deleteComunicadoMedia(n.id), 'Excluir o arquivo de mídia deste comunicado para liberar espaço no servidor? (O texto será mantido)')}
+                          className="text-amber-500 hover:text-amber-400 p-1"
+                        >
+                          <HardDrive size={15} />
+                        </button>
+                      )}
                       <button
                         type="button"
-                        title="Remover comunicado"
-                        onClick={() => action(() => rhApi.deleteComunicado(n.id), 'Remover este comunicado?')}
-                        className="text-red-400 h-fit"
+                        title="Remover comunicado completo"
+                        onClick={() => action(() => rhApi.deleteComunicado(n.id), 'Remover este comunicado e todos os seus arquivos do servidor?')}
+                        className="text-red-400 hover:text-red-300 p-1"
                       >
                         <XCircle size={16} />
                       </button>
@@ -1323,6 +1333,11 @@ export const RHPage: React.FC = () => {
           comunicado={previewComunicado}
           isRead={true}
           onClose={() => setPreviewComunicado(null)}
+          canManage={true}
+          onDeleteMedia={async () => {
+            await action(() => rhApi.deleteComunicadoMedia(previewComunicado.id), 'Excluir arquivo de mídia deste comunicado do servidor?');
+            setPreviewComunicado(null);
+          }}
         />
       )}
     </div>

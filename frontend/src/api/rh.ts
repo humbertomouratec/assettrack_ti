@@ -70,6 +70,7 @@ export const rhApi = {
   }): Promise<RHComunicado> =>
     (await apiClient.post<RHComunicado>('/rh/comunicados', data)).data,
   deleteComunicado: async (id: number): Promise<void> => { await apiClient.delete(`/rh/comunicados/${id}`); },
+  deleteComunicadoMedia: async (id: number): Promise<void> => { await apiClient.delete(`/rh/comunicados/${id}/midia`); },
   myPortal: async (): Promise<MyRHPortal> => (await apiClient.get<MyRHPortal>('/profile/rh')).data,
   markMyComunicadoRead: async (id: number): Promise<void> => { await apiClient.post(`/profile/rh/comunicados/${id}/lida`); },
   messages: async (): Promise<{ mensagens: Array<any>; contatos: Array<{ id: number; nome: string }> }> => (await apiClient.get('/profile/mensagens')).data,

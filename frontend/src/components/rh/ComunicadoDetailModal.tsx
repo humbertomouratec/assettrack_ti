@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, Megaphone, CalendarDays, Building2, User, Volume2, Video as VideoIcon, Image as ImageIcon, CheckCircle2, Clock } from 'lucide-react';
+import { X, Check, Megaphone, CalendarDays, Building2, User, Volume2, Video as VideoIcon, Image as ImageIcon, CheckCircle2, Clock, Trash2, HardDrive } from 'lucide-react';
 import type { RHComunicado } from '../../types/rh';
 import { toApiFileUrl } from '../../api/client';
 
@@ -8,6 +8,8 @@ interface ComunicadoDetailModalProps {
   isRead: boolean;
   onClose: () => void;
   onMarkRead?: () => Promise<void> | void;
+  onDeleteMedia?: () => Promise<void> | void;
+  canManage?: boolean;
 }
 
 export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
@@ -15,8 +17,11 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
   isRead,
   onClose,
   onMarkRead,
+  onDeleteMedia,
+  canManage = false,
 }) => {
   const [marking, setMarking] = useState(false);
+  const [deletingMedia, setDeletingMedia] = useState(false);
   const isUpdate = comunicado.titulo.startsWith('Atualização do RH:');
 
   const isAudioType = comunicado.midia_tipo === 'audio';
@@ -34,6 +39,19 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
   const resolvedVideoUrl = isVideoType
     ? (toApiFileUrl(comunicado.video_url) || toApiFileUrl(comunicado.audio_url))
     : (!comunicado.midia_tipo ? toApiFileUrl(comunicado.video_url) : null);
+
+  const handleDeleteMedia = async () => {
+    if (!onDeleteMedia) return;
+    if (!window.confirm('Deseja excluir permanentemente o arquivo de mídia deste comunicado para liberar espaço no servidor? O texto da mensagem continuará visível.')) {
+      return;
+    }
+    setDeletingMedia(true);
+    try {
+      await onDeleteMedia();
+    } finally {
+      setDeletingMedia(false);
+    }
+  };
 
   const handleMark = async () => {
     if (!onMarkRead || isRead) return;
@@ -69,6 +87,8 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
       </span>
     );
   };
+
+  const hasMedia = Boolean(resolvedImageUrl || resolvedAudioUrl || resolvedVideoUrl);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in">
@@ -125,6 +145,26 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
           <div className="whitespace-pre-wrap text-sm leading-relaxed text-brand-text bg-white/40 border border-brand-border/40 p-4 rounded-xl">
             {comunicado.mensagem}
           </div>
+
+          {/* Media Section Header with Delete Media Option */}
+          {hasMedia && canManage && onDeleteMedia && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <span className="text-xs font-mono text-brand-muted flex items-center gap-1">
+                <HardDrive size={13} className="text-brand-primary" />
+                Mídia armazenada no servidor
+              </span>
+              <button
+                type="button"
+                disabled={deletingMedia}
+                onClick={handleDeleteMedia}
+                className="inline-flex items-center gap-1 rounded bg-red-500/10 border border-red-500/30 px-2 py-1 text-[11px] font-mono text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+                title="Excluir arquivo do servidor para economizar espaço em disco"
+              >
+                <Trash2 size={12} />
+                {deletingMedia ? 'Excluindo mídia...' : 'Liberar espaço (Excluir mídia)'}
+              </button>
+            </div>
+          )}
 
           {/* Media Attachments */}
           {resolvedImageUrl && (
