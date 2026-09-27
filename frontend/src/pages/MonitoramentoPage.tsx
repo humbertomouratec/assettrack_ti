@@ -53,7 +53,7 @@ const assigneeLabel = (ticket: ServiceTicket) =>
 const rhStatusMeta: Record<RHStatusType, { label: string; className: string; dot: string }> = {
   trabalhando: { label: 'Trabalhando', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200', dot: 'bg-emerald-300' },
   folga: { label: 'Folga', className: 'border-sky-300/20 bg-sky-300/10 text-sky-200', dot: 'bg-sky-300' },
-  ferias: { label: 'Férias', className: 'border-violet-300/20 bg-violet-300/10 text-violet-200', dot: 'bg-violet-300' },
+  ferias: { label: 'Férias', className: 'border-teal-300/20 bg-teal-300/10 text-teal-200', dot: 'bg-teal-300' },
   banco_horas: { label: 'Banco de horas', className: 'border-amber-300/20 bg-amber-300/10 text-amber-200', dot: 'bg-amber-300' },
   desligado: { label: 'Desligado', className: 'border-red-300/20 bg-red-300/10 text-red-200', dot: 'bg-red-300' },
 };
@@ -194,7 +194,7 @@ export const MonitoramentoPage: React.FC = () => {
   const metricCards = [
     { label: 'Chamados em aberto', value: stats?.tickets_open ?? openTickets.length, icon: Ticket, color: 'text-cyan-300', link: `${openTickets.length} na fila` },
     { label: 'Prioridade alta', value: urgentTickets.length, icon: AlertTriangle, color: 'text-amber-300', link: 'atenção imediata' },
-    { label: 'Em manutenção', value: stats?.total_assets_maintenance ?? activeMaintenance.length, icon: Wrench, color: 'text-violet-300', link: `${activeMaintenance.length} solicitações ativas` },
+    { label: 'Em manutenção', value: stats?.total_assets_maintenance ?? activeMaintenance.length, icon: Wrench, color: 'text-amber-300', link: `${activeMaintenance.length} solicitações ativas` },
     { label: 'Alertas ativos', value: activeEmergency.length, icon: AlertOctagon, color: 'text-red-300', link: connection === 'online' ? 'tempo real ativo' : 'reconectando' },
     { label: 'Cartões no Kanban', value: kanbanSummary.totalCards, icon: Activity, color: 'text-emerald-300', link: `${kanbanProjects.length} projetos acompanhados` },
   ];

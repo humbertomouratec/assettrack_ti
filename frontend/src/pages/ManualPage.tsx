@@ -807,7 +807,7 @@ export const ManualPage: React.FC = () => {
                   <td className="p-3 font-bold text-brand-text">Recursos Humanos (rh)</td>
                   <td className="p-3 text-brand-text">Termos de responsabilidade, status da equipe, comunicados e TV.</td>
                   <td className="p-3 text-brand-muted">Dashboard, Portal RH (Termos, Status, Offboarding), Usuários/Relatórios, Comunicados, Suporte, Crachá.</td>
-                  <td className="p-3 text-right font-mono font-bold text-purple-600">Gestão de Pessoas</td>
+                  <td className="p-3 text-right font-mono font-bold text-teal-600">Gestão de Pessoas</td>
                 </tr>
                 <tr className="hover:bg-slate-50/50">
                   <td className="p-3 font-bold text-brand-text">Usuário Comum (usuario_comum)</td>

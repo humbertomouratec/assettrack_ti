@@ -132,7 +132,7 @@ func (r *ServiceDeskRepository) CreateNotification(notification *models.ServiceD
 
 func (r *ServiceDeskRepository) ListNotificationsByUser(userID uint, limit int) ([]models.ServiceDeskNotification, error) {
 	var notifications []models.ServiceDeskNotification
-	err := r.db.Preload("Autor").Where("user_id = ?", userID).
+	err := r.db.Preload("Autor").Preload("Ticket").Where("user_id = ?", userID).
 		Order("data_criacao desc").Limit(limit).Find(&notifications).Error
 	return notifications, err
 }
@@ -140,6 +140,18 @@ func (r *ServiceDeskRepository) ListNotificationsByUser(userID uint, limit int) 
 func (r *ServiceDeskRepository) MarkNotificationRead(notificationID, userID uint) error {
 	return r.db.Model(&models.ServiceDeskNotification{}).
 		Where("id = ? AND user_id = ?", notificationID, userID).
+		Update("lida", true).Error
+}
+
+func (r *ServiceDeskRepository) MarkTicketNotificationsRead(ticketID uint) error {
+	return r.db.Model(&models.ServiceDeskNotification{}).
+		Where("ticket_id = ? AND lida = false", ticketID).
+		Update("lida", true).Error
+}
+
+func (r *ServiceDeskRepository) MarkTicketNotificationsReadForUser(ticketID, userID uint) error {
+	return r.db.Model(&models.ServiceDeskNotification{}).
+		Where("ticket_id = ? AND user_id = ? AND lida = false", ticketID, userID).
 		Update("lida", true).Error
 }
 

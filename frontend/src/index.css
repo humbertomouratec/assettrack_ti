@@ -167,3 +167,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     padding: 1.25rem !important;
   }
 }
+
+/* Accessibility & Vercel Web Interface Guidelines Compliance */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Numeric stability for KPI dashboards, tables, and counters */
+.tabular-nums, [data-numeric], .metric-number, .kpi-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessible Skip Link */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--color-brand-primary);
+  color: #ffffff !important;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: top 0.2s ease-in-out;
+}
+.skip-link:focus, .skip-link:focus-visible {
+  top: 1rem;
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+

@@ -454,6 +454,12 @@ func (r *PMNotificationRepository) DeleteByPlan(planID uint) error {
 	return r.db.Where("plan_id = ?", planID).Delete(&models.MaintenanceNotification{}).Error
 }
 
+func (r *PMNotificationRepository) MarkReadByOrderForUser(orderID, userID uint) error {
+	return r.db.Model(&models.MaintenanceNotification{}).
+		Where("order_id = ? AND usuario_id = ?", orderID, userID).
+		Update("lida", true).Error
+}
+
 // ---------- Custom types ----------
 
 type PMCustomTypeRepository struct {

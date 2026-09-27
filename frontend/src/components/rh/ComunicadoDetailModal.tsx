@@ -98,7 +98,7 @@ export const ComunicadoDetailModal: React.FC<ComunicadoDetailModalProps> = ({
           <div className="flex items-start gap-3.5 min-w-0 pr-4">
             <div
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                isUpdate ? 'bg-violet-500/15 text-violet-600' : 'bg-brand-primary/15 text-brand-primary'
+                isUpdate ? 'bg-teal-500/15 text-teal-600' : 'bg-brand-primary/15 text-brand-primary'
               }`}
             >
               {isUpdate ? <CalendarDays size={22} /> : <Megaphone size={22} />}

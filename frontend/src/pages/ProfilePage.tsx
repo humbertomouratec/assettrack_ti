@@ -206,9 +206,12 @@ export const ProfilePage: React.FC = () => {
       );
       unseen.forEach((item) => {
         notifiedRHIds.current.add(item.comunicado.id);
-        void notifyAndroid(item.comunicado.titulo, item.comunicado.mensagem, {
-          rh_comunicado_id: item.comunicado.id,
-        });
+        void notifyAndroid(
+          item.comunicado.titulo,
+          item.comunicado.mensagem,
+          { rh_comunicado_id: item.comunicado.id },
+          `rh_${item.comunicado.id}`
+        );
       });
       setRhPortal(data);
       setRhLoadError('');
@@ -250,9 +253,12 @@ export const ProfilePage: React.FC = () => {
         .forEach((n) => {
           if (!notifiedSDIds.current.has(n.id)) {
             notifiedSDIds.current.add(n.id);
-            void notifyAndroid(n.titulo || 'Novo Chamado de Suporte', n.mensagem, {
-              sd_ticket_id: n.ticket_id,
-            });
+            void notifyAndroid(
+              n.titulo || 'Novo Chamado de Suporte',
+              n.mensagem,
+              { sd_ticket_id: n.ticket_id },
+              `sd_${n.id}`
+            );
           }
         });
 
@@ -275,9 +281,12 @@ export const ProfilePage: React.FC = () => {
       unreadPM.forEach((notif) => {
         if (!notifiedPMIds.current.has(notif.id)) {
           notifiedPMIds.current.add(notif.id);
-          void notifyAndroid('Nova OS Preventiva Designada', notif.mensagem, {
-            pm_order_id: notif.order_id,
-          });
+          void notifyAndroid(
+            'Nova OS Preventiva Designada',
+            notif.mensagem,
+            { pm_order_id: notif.order_id },
+            `pm_${notif.id}`
+          );
         }
       });
 
@@ -288,9 +297,12 @@ export const ProfilePage: React.FC = () => {
         .forEach((n) => {
           if (!notifiedKBIds.current.has(n.id)) {
             notifiedKBIds.current.add(n.id);
-            void notifyAndroid(n.titulo || 'Atualização no Kanban', n.mensagem, {
-              kb_card_id: n.card_id,
-            });
+            void notifyAndroid(
+              n.titulo || 'Atualização no Kanban',
+              n.mensagem,
+              { kb_card_id: n.card_id },
+              `kb_${n.id}`
+            );
           }
         });
     } catch (err) {

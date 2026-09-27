@@ -58,14 +58,21 @@ func (h *ServiceDeskHandler) notify(userIDs []uint, authorID uint, ticket models
 	}
 }
 
-func (h *ServiceDeskHandler) notifyStaff(authorID uint, ticket models.ServiceTicket, kind, title, message string) {
+func (h *ServiceDeskHandler) notifyStaff(authorID uint, ticket models.ServiceTicket, kind, title, message string, excludeIDs ...uint) {
 	staff, err := h.userRepo.ListByRoles([]string{models.RoleAdmin, models.RoleGerente, models.RoleGerenteInfra, models.RoleTecnico})
 	if err != nil {
 		return
 	}
+	excludeMap := make(map[uint]bool, len(excludeIDs)+1)
+	excludeMap[authorID] = true
+	for _, id := range excludeIDs {
+		excludeMap[id] = true
+	}
 	ids := make([]uint, 0, len(staff))
 	for _, staffMember := range staff {
-		ids = append(ids, staffMember.ID)
+		if !excludeMap[staffMember.ID] {
+			ids = append(ids, staffMember.ID)
+		}
 	}
 	h.notify(ids, authorID, ticket, kind, title, message)
 }
@@ -201,9 +208,11 @@ func (h *ServiceDeskHandler) CreateTicket(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
-	h.notifyStaff(user.ID, ticket, "ticket_opened", "Novo chamado aberto", fmt.Sprintf("%s abriu o chamado %s (%s).", user.Nome, ticket.Codigo, ticket.Prioridade))
-	if ticket.TecnicoID != nil {
+	if ticket.TecnicoID != nil && *ticket.TecnicoID > 0 {
+		h.notifyStaff(user.ID, ticket, "ticket_opened", "Novo chamado aberto", fmt.Sprintf("%s abriu o chamado %s (%s).", user.Nome, ticket.Codigo, ticket.Prioridade), *ticket.TecnicoID)
 		h.notify([]uint{*ticket.TecnicoID}, user.ID, ticket, "ticket_assigned", "Chamado atribuído a você", fmt.Sprintf("Você foi designado para o chamado %s.", ticket.Codigo))
+	} else {
+		h.notifyStaff(user.ID, ticket, "ticket_opened", "Novo chamado aberto", fmt.Sprintf("%s abriu o chamado %s (%s).", user.Nome, ticket.Codigo, ticket.Prioridade))
 	}
 	c.JSON(http.StatusCreated, ticket)
 }
@@ -363,8 +372,13 @@ func (h *ServiceDeskHandler) UpdateTicket(c *gin.Context) {
 	if req.Solucao != nil {
 		h.notify([]uint{ticket.SolicitanteID}, user.ID, *ticket, "ticket_solution", "Solução registrada no chamado", fmt.Sprintf("Uma solução foi registrada para o chamado %s.", ticket.Codigo))
 	}
-	if ticket.Status == models.ServiceStatusFechado || ticket.Status == models.ServiceStatusCancelado {
-		h.notifyStaff(user.ID, *ticket, "ticket_closed", "Chamado encerrado", fmt.Sprintf("O chamado %s foi %s.", ticket.Codigo, strings.ToLower(string(ticket.Status))))
+	if ticket.Status == models.ServiceStatusFechado || ticket.Status == models.ServiceStatusCancelado || ticket.Status == models.ServiceStatusResolvido {
+		if ticket.Status != models.ServiceStatusResolvido {
+			h.notifyStaff(user.ID, *ticket, "ticket_closed", "Chamado encerrado", fmt.Sprintf("O chamado %s foi %s.", ticket.Codigo, strings.ToLower(string(ticket.Status))))
+		}
+		_ = h.repo.MarkTicketNotificationsRead(ticket.ID)
+	} else if ticket.Status == models.ServiceStatusEmAtendimento && ticket.TecnicoID != nil {
+		_ = h.repo.MarkTicketNotificationsReadForUser(ticket.ID, *ticket.TecnicoID)
 	}
 
 	// Gamificação: premiar técnico ao resolver chamado ou receber nota máxima

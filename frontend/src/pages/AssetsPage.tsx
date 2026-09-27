@@ -1219,7 +1219,7 @@ export const AssetsPage: React.FC = () => {
     { name: 'Disponível', color: 'border-green-500/30 bg-green-500/5 text-green-400', label: 'Disponível' },
     { name: 'Em uso', color: 'border-blue-500/30 bg-blue-500/5 text-blue-400', label: 'Em Uso' },
     { name: 'Manutenção', color: 'border-amber-500/30 bg-amber-500/5 text-amber-400', label: 'Manutenção' },
-    { name: 'Armazenado', color: 'border-purple-500/30 bg-purple-500/5 text-purple-400', label: 'Armazenado' },
+    { name: 'Armazenado', color: 'border-indigo-500/30 bg-indigo-500/5 text-indigo-500', label: 'Armazenado' },
     { name: 'Baixado', color: 'border-red-500/30 bg-red-500/5 text-red-400', label: 'Baixado' },
   ];
 
@@ -1322,7 +1322,7 @@ export const AssetsPage: React.FC = () => {
           { label: 'Total de ativos', value: assets.length, hint: 'registros na visão atual', icon: Layers3, tone: 'text-blue-600 bg-blue-50' },
           { label: 'Disponíveis', value: assetStatusCounts['Disponível'] || 0, hint: 'prontos para uso', icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50' },
           { label: 'Em manutenção', value: assetStatusCounts['Manutenção'] || 0, hint: 'fora de operação', icon: Wrench, tone: 'text-amber-600 bg-amber-50' },
-          { label: 'Valor inventariado', value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(assetInventoryValue), hint: 'soma dos ativos carregados', icon: DollarSign, tone: 'text-violet-600 bg-violet-50' },
+          { label: 'Valor inventariado', value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(assetInventoryValue), hint: 'soma dos ativos carregados', icon: DollarSign, tone: 'text-emerald-600 bg-emerald-50' },
         ].map(({ label, value, hint, icon: Icon, tone }) => (
           <div key={label} className="rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm"><div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-right text-2xl font-bold tracking-tight text-brand-text">{value}</span></div><div className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-text">{label}</div><div className="mt-1 text-xs text-brand-muted">{hint}</div></div>
         ))}
@@ -1686,7 +1686,7 @@ export const AssetsPage: React.FC = () => {
                       <div>
                         <div className="font-medium text-xs text-brand-text flex items-center justify-between">
                           <span className="truncate pr-1">{a.nome}</span>
-                          {a.bloqueado && <Lock size={10} className="text-purple-400 flex-shrink-0" />}
+                          {a.bloqueado && <Lock size={10} className="text-indigo-500 flex-shrink-0" />}
                         </div>
                         <div className="text-[10px] text-brand-muted font-mono">{a.e_patrimonio}</div>
                       </div>
@@ -3321,7 +3321,7 @@ export const AssetsPage: React.FC = () => {
                       </span>
                       
                       {selectedAssetForDetail.bloqueado && (
-                        <span className="text-[10px] font-mono uppercase px-2.5 py-1 border border-purple-500/30 bg-purple-500/5 text-purple-400 flex items-center space-x-1">
+                        <span className="text-[10px] font-mono uppercase px-2.5 py-1 border border-indigo-500/30 bg-indigo-500/5 text-indigo-500 flex items-center space-x-1">
                           <Lock size={12} />
                           <span>Ativo Fixo (Bloqueado)</span>
                         </span>

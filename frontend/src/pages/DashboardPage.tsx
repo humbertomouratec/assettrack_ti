@@ -263,10 +263,15 @@ export const DashboardPage: React.FC = () => {
       unreadNotifs.forEach((notif) => {
         if (!notifiedPMOrderIdsRef.current.has(notif.id)) {
           notifiedPMOrderIdsRef.current.add(notif.id);
-          notifyAndroid('Nova Manutenção Preventiva', notif.mensagem, {
-            tipo: 'PREVENTIVA_DESIGNACAO',
-            order_id: notif.order_id,
-          });
+          notifyAndroid(
+            'Nova Manutenção Preventiva',
+            notif.mensagem,
+            {
+              tipo: 'PREVENTIVA_DESIGNACAO',
+              order_id: notif.order_id,
+            },
+            `pm_${notif.id}`
+          );
         }
       });
 
@@ -1113,7 +1118,7 @@ export const DashboardPage: React.FC = () => {
               className="p-5 bg-brand-card border border-brand-border hover:border-brand-primary/50 transition-all group flex flex-col justify-between space-y-4 rounded-xl"
             >
               <div className="flex items-center justify-between">
-                <div className="p-3 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-lg">
+                <div className="p-3 bg-cyan-500/10 text-cyan-600 border border-cyan-500/20 rounded-lg">
                   <ArrowLeftRight size={26} />
                 </div>
                 <span className="text-xs font-mono text-brand-muted group-hover:text-brand-primary transition-colors">Acessar →</span>
@@ -1602,7 +1607,7 @@ export const DashboardPage: React.FC = () => {
               <div className="bg-brand-card border border-brand-border p-4 relative overflow-hidden group-hover:border-brand-primary/40 transition-all flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-brand-muted">Empréstimos</span>
-                  <div className="p-2 bg-purple-500/10 text-purple-500 rounded-lg">
+                  <div className="p-2 bg-cyan-500/10 text-cyan-600 rounded-lg">
                     <ArrowLeftRight size={18} />
                   </div>
                 </div>

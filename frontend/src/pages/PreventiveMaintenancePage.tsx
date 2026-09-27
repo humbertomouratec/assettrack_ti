@@ -48,7 +48,7 @@ const statusColor: Record<string, string> = {
   'Agendada': 'text-cyan-400 border-cyan-500/30',
   'Em andamento': 'text-yellow-400 border-yellow-500/30',
   'Aguardando peça': 'text-orange-400 border-orange-500/30',
-  'Pausada': 'text-purple-400 border-purple-500/30',
+  'Pausada': 'text-teal-400 border-teal-500/30',
   'Concluída': 'text-green-400 border-green-500/30',
   'Cancelada': 'text-red-400 border-red-500/30',
 };
@@ -1012,7 +1012,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
               { label: 'OS abertas', value: dash.open_orders, hint: 'aguardando ação', icon: Wrench, tone: 'text-orange-600 bg-orange-50' },
               { label: 'OS nesta semana', value: dash.due_soon, hint: 'agenda próxima', icon: CalendarDays, tone: 'text-cyan-600 bg-cyan-50' },
               { label: 'OS concluídas', value: dash.orders_by_status['Concluída'] ?? 0, hint: `${dash.total_orders} no total`, icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50' },
-              { label: 'Alertas pendentes', value: unreadNotifications, hint: 'notificações não lidas', icon: Bell, tone: 'text-violet-600 bg-violet-50' },
+              { label: 'Alertas pendentes', value: unreadNotifications, hint: 'notificações não lidas', icon: Bell, tone: 'text-amber-600 bg-amber-50' },
             ].map(({ label, value, hint, icon: Icon, tone }) => (
               <div key={label} className="rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-2xl font-bold tracking-tight text-brand-text">{value}</span></div>
@@ -1075,7 +1075,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
               { label: 'Ordens analisadas', value: orders.length, hint: `${reportOpenOrders.length} em aberto`, icon: ClipboardList, tone: 'text-blue-600 bg-blue-50' },
               { label: 'Taxa de conclusão', value: `${reportCompletionRate.toFixed(0)}%`, hint: `${reportCompletedOrders.length} concluídas`, icon: TrendingUp, tone: 'text-emerald-600 bg-emerald-50' },
               { label: 'Tempo médio', value: formatMinutes(Math.round(reportAverageMinutes)), hint: 'ordens concluídas', icon: Timer, tone: 'text-amber-600 bg-amber-50' },
-              { label: 'Custo registrado', value: formatReportCurrency(reportTotalCost), hint: `${reportTotalPhotos} fotos de evidência`, icon: DollarSign, tone: 'text-violet-600 bg-violet-50' },
+              { label: 'Custo registrado', value: formatReportCurrency(reportTotalCost), hint: `${reportTotalPhotos} fotos de evidência`, icon: DollarSign, tone: 'text-emerald-600 bg-emerald-50' },
             ].map(({ label, value, hint, icon: Icon, tone }) => (
               <div key={label} className="rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-right text-xl font-bold tracking-tight text-brand-text md:text-2xl">{value}</span></div>
@@ -2031,7 +2031,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
               )}
               {canWorkOrder && orderDetail.order.status === 'Em andamento' && (
                 <button onClick={() => orderAction(orderDetail.order.id, 'pausar')}
-                  className="bg-purple-500/10 text-purple-400 border border-purple-500/30 px-3 py-2 font-mono text-xs uppercase hover:bg-purple-500/20">
+                  className="bg-teal-500/10 text-teal-400 border border-teal-500/30 px-3 py-2 font-mono text-xs uppercase hover:bg-teal-500/20">
                   <Pause size={12} className="inline mr-1" /> Pausar
                 </button>
               )}

@@ -180,7 +180,7 @@ export const AlertsPage: React.FC = () => {
         {[
           { label: 'Alertas em aberto', value: activeHistoryCount, hint: 'aguardando atendimento', icon: ShieldAlert, tone: 'text-red-600 bg-red-50' },
           { label: 'Cientes pendentes', value: acknowledgedCount, hint: 'assumidos pela equipe', icon: CheckCircle2, tone: 'text-amber-600 bg-amber-50' },
-          { label: 'Recebidos agora', value: liveAlerts.length, hint: 'eventos nesta sessão', icon: Siren, tone: 'text-violet-600 bg-violet-50' },
+          { label: 'Recebidos agora', value: liveAlerts.length, hint: 'eventos nesta sessão', icon: Siren, tone: 'text-cyan-600 bg-cyan-50' },
           { label: 'Comunicados', value: avisos.length, hint: 'avisos cadastrados', icon: Bell, tone: 'text-blue-600 bg-blue-50' },
         ].map(({ label, value, hint, icon: Icon, tone }) => (
           <div key={label} className="rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm">

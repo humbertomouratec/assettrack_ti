@@ -51,7 +51,7 @@ import {
   Bot,
 } from 'lucide-react';
 
-const columnPalette = ['#60A5FA', '#F59E0B', '#A78BFA', '#34D399', '#F87171', '#22D3EE'];
+const columnPalette = ['#60A5FA', '#F59E0B', '#06B6D4', '#34D399', '#F87171', '#22D3EE'];
 const boardBackgroundPalette = ['#212121', '#0F172A', '#12304A', '#14532D', '#5B2333', '#3B1D78', '#6B3F12', '#334155'];
 const defaultBoardBackgroundColor = '#212121';
 const boardPatternOptions = [
@@ -74,7 +74,7 @@ const boardThemePresets = [
   { id: 'ops', name: 'Operações', color: '#12304A', pattern: 'grid', accent: '#60A5FA' },
   { id: 'executivo', name: 'Executivo', color: '#0F172A', pattern: 'clean', accent: '#F59E0B' },
   { id: 'suporte', name: 'Suporte', color: '#14532D', pattern: 'glow', accent: '#34D399' },
-  { id: 'criativo', name: 'Criativo', color: '#3B1D78', pattern: 'dots', accent: '#A78BFA' },
+  { id: 'criativo', name: 'Criativo', color: '#0f3c64', pattern: 'dots', accent: '#0284c7' },
 ] as const;
 const getDomainName = (url: string) => {
   try {

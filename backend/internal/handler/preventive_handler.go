@@ -905,7 +905,9 @@ func (h *PreventiveHandler) UpdateOrder(c *gin.Context) {
 	if order.TecnicoID != nil && (tecnicoAnteriorID == nil || *tecnicoAnteriorID != *order.TecnicoID) {
 		h.notifyOrderAssigned(*order)
 	}
-	h.syncKanbanOrder(order.ID, user.ID)
+	if order.Status == models.PMStatusConcluida || order.Status == models.PMStatusCancelada {
+		_ = h.notifRepo.DeleteByOrder(order.ID)
+	}
 
 	c.JSON(http.StatusOK, order)
 }
@@ -1004,6 +1006,7 @@ func (h *PreventiveHandler) StartOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	_ = h.notifRepo.MarkReadByOrderForUser(order.ID, user.ID)
 	h.syncKanbanOrder(order.ID, user.ID)
 	c.JSON(http.StatusOK, order)
 }
@@ -1241,6 +1244,8 @@ func (h *PreventiveHandler) CompleteOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	_ = h.notifRepo.DeleteByOrder(order.ID)
 
 	// Notify managers
 	h.notifyOrderCompleted(*order, user.Nome)

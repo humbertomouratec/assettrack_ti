@@ -168,7 +168,7 @@ export const WebhooksPage: React.FC = () => {
                     {w.is_active ? 'Ativo' : 'Inativo'}
                   </span>
                   {w.secret_key && (
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 border border-purple-500/30 text-purple-400 flex items-center">
+                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 border border-teal-500/30 text-teal-400 flex items-center">
                       <Key size={10} className="mr-1" /> Assinatura HMAC
                     </span>
                   )}

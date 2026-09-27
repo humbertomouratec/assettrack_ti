@@ -1577,7 +1577,7 @@ export const ProcurementPage: React.FC = () => {
                         </button>
                       )}
                       {manage && ['Aceito', 'Recebido parcialmente'].includes(o.status) && (
-                        <button onClick={() => updateOrderStatus(o, 'Em transporte')} className="text-purple-400 border border-purple-500/30 px-2.5 py-1.5 font-mono text-xs uppercase mr-2 hover:bg-purple-500/10">
+                        <button onClick={() => updateOrderStatus(o, 'Em transporte')} className="text-cyan-500 border border-cyan-500/30 px-2.5 py-1.5 font-mono text-xs uppercase mr-2 hover:bg-cyan-500/10">
                           Em Transporte
                         </button>
                       )}

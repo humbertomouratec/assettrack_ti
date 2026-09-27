@@ -33,12 +33,15 @@ export interface ServiceTicketInteraction {
 
 export interface ServiceDeskNotification {
   id: number;
+  user_id?: number;
   ticket_id: number;
+  autor_id?: number;
   tipo: string;
   titulo: string;
   mensagem: string;
   lida: boolean;
   data_criacao: string;
+  ticket?: ServiceTicket;
 }
 
 export interface ServiceTicket {
@@ -46,7 +49,7 @@ export interface ServiceTicket {
   codigo: string;
   descricao: string;
   prioridade: 'baixa' | 'media' | 'alta' | 'urgente';
-  status: 'aberto' | 'em_atendimento' | 'resolvido' | 'fechado';
+  status: 'aberto' | 'em_atendimento' | 'resolvido' | 'fechado' | 'cancelado' | 'aguardando_terceiro' | 'esperando_compra';
   foto?: string;
   solicitante_id: number;
   solicitante?: {

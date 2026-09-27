@@ -12,11 +12,12 @@ import {
   Megaphone,
   Clock,
   AlertTriangle,
-  Filter,
   Inbox,
   Layers,
   ArrowRight,
   RefreshCw,
+  History,
+  Sparkles,
 } from 'lucide-react';
 import type { ServiceTicket, ServiceDeskNotification } from '../../types/serviceDesk';
 import type { SolicitacaoManutencao } from '../../types/maintenance';
@@ -39,6 +40,7 @@ export interface UnifiedWorkItem {
   priority?: 'urgente' | 'alta' | 'media' | 'baixa';
   createdAt: string;
   isUnread: boolean;
+  isAttended?: boolean;
   linkUrl: string;
   actionLabel: string;
   dateInfo?: {
@@ -102,9 +104,10 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
   onRefresh,
 }) => {
   const [selectedSource, setSelectedSource] = useState<NotificationSource | 'all'>('all');
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<'pending' | 'history'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
 
   // Helper date calculation for PM
   const calculatePMDateInfo = (dataAgendada?: string) => {
@@ -136,53 +139,122 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     };
   };
 
-  // Build unified list of work items & notifications
+  // Build unified list of work items & notifications with STRICT DEDUPLICATION AND ATTENDANCE FILTERING
   const allItems: UnifiedWorkItem[] = useMemo(() => {
     const items: UnifiedWorkItem[] = [];
 
-    // 1. Service Desk Notifications
+    // Map service desk notifications by ticket_id
+    const sdNotifsByTicket = new Map<number, ServiceDeskNotification[]>();
+    const orphanSdNotifs: ServiceDeskNotification[] = [];
+
     sdNotifications.forEach((n) => {
-      items.push({
-        id: `sd_notif_${n.id}`,
-        source: 'service_desk',
-        sourceLabel: 'Suporte',
-        itemType: 'notification',
-        title: n.titulo || 'Atualização no Chamado',
-        description: n.mensagem || '',
-        code: n.ticket_id ? `#CHAM-${n.ticket_id}` : undefined,
-        createdAt: n.data_criacao || new Date().toISOString(),
-        isUnread: !n.lida,
-        linkUrl: `/servicos?ticketId=${n.ticket_id}`,
-        actionLabel: 'Ver Chamado',
-        onMarkRead: () => onMarkSdRead(n.id),
-      });
+      // If notification has a ticket attached and that ticket is already resolved/closed/cancelled, it is ALREADY ATTENDED!
+      if (
+        n.ticket &&
+        (n.ticket.status === 'resolvido' ||
+          n.ticket.status === 'fechado' ||
+          n.ticket.status === 'cancelado')
+      ) {
+        return;
+      }
+      if (n.ticket_id) {
+        const list = sdNotifsByTicket.get(n.ticket_id) || [];
+        list.push(n);
+        sdNotifsByTicket.set(n.ticket_id, list);
+      } else {
+        orphanSdNotifs.push(n);
+      }
     });
 
-    // 1b. Active Assigned Tickets (Tasks)
+    const processedTickets = new Set<number>();
+
+    // 1. Process active assigned Service Desk tickets (Tasks)
     sdTickets.forEach((t) => {
-      // Do not duplicate if already completed
-      if (t.status === 'fechado' || t.status === 'resolvido') return;
+      // JÁ ATENDIDO / FECHADO: Não deve aparecer nas notificações pendentes
+      const st = t.status as string;
+      if (st === 'fechado' || st === 'resolvido' || st === 'cancelado') return;
+      processedTickets.add(t.id);
+
+      const relatedNotifs = sdNotifsByTicket.get(t.id) || [];
+      const hasUnread = relatedNotifs.some((n) => !n.lida) || t.status === 'aberto';
+      const latestNotif = relatedNotifs[0];
+
+      const markTicketRead = relatedNotifs.length > 0
+        ? async () => {
+            await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkSdRead(n.id)));
+          }
+        : undefined;
+
       items.push({
-        id: `sd_task_${t.id}`,
+        id: `sd_ticket_${t.id}`,
         source: 'service_desk',
         sourceLabel: 'Suporte',
         itemType: 'task',
         title: t.servico?.nome || `Chamado #${t.codigo}`,
         subtitle: t.solicitante ? `Solicitante: ${t.solicitante.nome}` : undefined,
-        description: t.descricao,
+        description: latestNotif?.mensagem || t.descricao,
         code: `#${t.codigo}`,
         status: t.status === 'em_atendimento' ? 'Em atendimento' : 'Aberto',
         priority: t.prioridade,
-        createdAt: t.data_abertura,
-        isUnread: t.status === 'aberto',
+        createdAt: latestNotif?.data_criacao || t.data_abertura,
+        isUnread: hasUnread,
+        isAttended: t.status === 'em_atendimento' && !hasUnread,
         linkUrl: `/servicos?ticketId=${t.id}`,
         actionLabel: 'Atender Chamado',
+        onMarkRead: markTicketRead,
+      });
+    });
+
+    // 1b. Remaining Service Desk notifications for tickets not assigned directly to technician
+    sdNotifsByTicket.forEach((notifs, ticketId) => {
+      if (processedTickets.has(ticketId)) return;
+      processedTickets.add(ticketId);
+
+      const latestNotif = notifs[0];
+      const hasUnread = notifs.some((n) => !n.lida);
+      const markTicketRead = async () => {
+        await Promise.all(notifs.filter((n) => !n.lida).map((n) => onMarkSdRead(n.id)));
+      };
+
+      items.push({
+        id: `sd_notif_ticket_${ticketId}`,
+        source: 'service_desk',
+        sourceLabel: 'Suporte',
+        itemType: 'notification',
+        title: latestNotif.titulo || 'Atualização no Chamado',
+        description: latestNotif.mensagem || '',
+        code: `#CHAM-${ticketId}`,
+        createdAt: latestNotif.data_criacao || new Date().toISOString(),
+        isUnread: hasUnread,
+        isAttended: !hasUnread,
+        linkUrl: `/servicos?ticketId=${ticketId}`,
+        actionLabel: 'Ver Chamado',
+        onMarkRead: markTicketRead,
+      });
+    });
+
+    // Orphan SD notifications
+    orphanSdNotifs.forEach((n) => {
+      items.push({
+        id: `sd_notif_${n.id}`,
+        source: 'service_desk',
+        sourceLabel: 'Suporte',
+        itemType: 'notification',
+        title: n.titulo || 'Notificação de Suporte',
+        description: n.mensagem || '',
+        createdAt: n.data_criacao || new Date().toISOString(),
+        isUnread: !n.lida,
+        isAttended: n.lida,
+        linkUrl: '/servicos',
+        actionLabel: 'Ver Suporte',
+        onMarkRead: () => onMarkSdRead(n.id),
       });
     });
 
     // 2. Maintenance / Bancada Requests
     maintRequests.forEach((m) => {
-      if (m.status === 'concluida' || m.status === 'rejeitada') return;
+      // JÁ ATENDIDO / CONCLUÍDO: Não deve aparecer se estiver concluída, rejeitada ou devolvida
+      if (m.status === 'concluida' || m.status === 'rejeitada' || m.status === 'entregue') return;
       const statusLabels: Record<string, string> = {
         pendente: 'Pendente de Triagem',
         aceita: 'Aceita em Bancada',
@@ -202,33 +274,44 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         priority: 'alta',
         createdAt: m.data_solicitacao || new Date().toISOString(),
         isUnread: m.status === 'pendente',
+        isAttended: m.status !== 'pendente',
         linkUrl: `/manutencoes?status=${m.status}`,
         actionLabel: 'Ver na Bancada',
       });
     });
 
-    // 3. Preventive Notifications
+    // 3. Preventive Maintenance (Deduplicated & Filtered for completed orders)
+    const pmNotifsByOrder = new Map<number, PMNotification[]>();
+    const orphanPmNotifs: PMNotification[] = [];
+
     pmNotifications.forEach((n) => {
-      items.push({
-        id: `pm_notif_${n.id}`,
-        source: 'preventive',
-        sourceLabel: 'Preventiva',
-        itemType: 'notification',
-        title: 'Designação de Preventiva',
-        description: n.mensagem,
-        code: n.order_id ? `#OS-${n.order_id}` : undefined,
-        createdAt: n.data_criacao || new Date().toISOString(),
-        isUnread: !n.lida,
-        linkUrl: `/manutencao-preventiva?openDetail=1&orderId=${n.order_id}`,
-        actionLabel: 'Ver OS Preventiva',
-        onMarkRead: () => onMarkPmRead(n.id),
-      });
+      if (n.order_id) {
+        const list = pmNotifsByOrder.get(n.order_id) || [];
+        list.push(n);
+        pmNotifsByOrder.set(n.order_id, list);
+      } else {
+        orphanPmNotifs.push(n);
+      }
     });
 
-    // 3b. Assigned Preventive Orders (Tasks)
+    const processedOrders = new Set<number>();
+
+    // 3a. Process active assigned Preventive Orders
     pmOrders.forEach((o) => {
+      // JÁ CONCLUÍDA / CANCELADA: Não deve aparecer nas notificações ativas!
       if (o.status === 'Concluída' || o.status === 'Cancelada') return;
+      processedOrders.add(o.id);
+
+      const relatedNotifs = pmNotifsByOrder.get(o.id) || [];
+      const hasUnread = relatedNotifs.some((n) => !n.lida);
       const dateInfo = calculatePMDateInfo(o.data_agendada);
+
+      const markOrderRead = relatedNotifs.length > 0
+        ? async () => {
+            await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkPmRead(n.id)));
+          }
+        : undefined;
+
       items.push({
         id: `pm_order_${o.id}`,
         source: 'preventive',
@@ -241,15 +324,101 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         status: o.status,
         priority: (o.prioridade?.toLowerCase() as any) || 'media',
         createdAt: o.data_abertura || o.data_agendada || new Date().toISOString(),
-        isUnread: dateInfo?.isOverdue || dateInfo?.isToday || o.status === 'Aberta',
+        isUnread: hasUnread || dateInfo?.isOverdue || dateInfo?.isToday || o.status === 'Aberta',
+        isAttended: o.status === 'Em andamento' && !hasUnread,
         linkUrl: `/manutencao-preventiva?openDetail=1&orderId=${o.id}`,
         actionLabel: 'Executar Preventiva',
         dateInfo,
+        onMarkRead: markOrderRead,
+      });
+    });
+
+    // 3b. Remaining PM notifications for orders not in assigned list
+    pmNotifsByOrder.forEach((notifs, orderId) => {
+      if (processedOrders.has(orderId)) return;
+      processedOrders.add(orderId);
+
+      const latest = notifs[0];
+      const hasUnread = notifs.some((n) => !n.lida);
+      const markOrderRead = async () => {
+        await Promise.all(notifs.filter((n) => !n.lida).map((n) => onMarkPmRead(n.id)));
+      };
+
+      items.push({
+        id: `pm_notif_order_${orderId}`,
+        source: 'preventive',
+        sourceLabel: 'Preventiva',
+        itemType: 'notification',
+        title: 'Designação de Preventiva',
+        description: latest.mensagem,
+        code: `#OS-${orderId}`,
+        createdAt: latest.data_criacao || new Date().toISOString(),
+        isUnread: hasUnread,
+        isAttended: !hasUnread,
+        linkUrl: `/manutencao-preventiva?openDetail=1&orderId=${orderId}`,
+        actionLabel: 'Ver OS Preventiva',
+        onMarkRead: markOrderRead,
+      });
+    });
+
+    // Orphan PM notifications
+    orphanPmNotifs.forEach((n) => {
+      items.push({
+        id: `pm_notif_${n.id}`,
+        source: 'preventive',
+        sourceLabel: 'Preventiva',
+        itemType: 'notification',
+        title: 'Notificação de Preventiva',
+        description: n.mensagem,
+        createdAt: n.data_criacao || new Date().toISOString(),
+        isUnread: !n.lida,
+        isAttended: n.lida,
+        linkUrl: '/manutencao-preventiva',
+        actionLabel: 'Ver Preventiva',
+        onMarkRead: () => onMarkPmRead(n.id),
       });
     });
 
     // 4. Kanban Notifications
+    const kbNotifsByCard = new Map<number, KanbanNotification[]>();
+    const orphanKbNotifs: KanbanNotification[] = [];
+
     kbNotifications.forEach((n) => {
+      if (n.card_id) {
+        const list = kbNotifsByCard.get(n.card_id) || [];
+        list.push(n);
+        kbNotifsByCard.set(n.card_id, list);
+      } else {
+        orphanKbNotifs.push(n);
+      }
+    });
+
+    kbNotifsByCard.forEach((notifs, cardId) => {
+      const latest = notifs[0];
+      const hasUnread = notifs.some((n) => !n.lida);
+      const markCardRead = async () => {
+        await Promise.all(notifs.filter((n) => !n.lida).map((n) => onMarkKbRead(n.id)));
+      };
+
+      items.push({
+        id: `kb_card_${cardId}`,
+        source: 'kanban',
+        sourceLabel: 'Kanban TI',
+        itemType: 'notification',
+        title: latest.titulo || 'Atualização no Kanban',
+        subtitle: notifs.length > 1 ? `${notifs.length} atualizações no cartão` : undefined,
+        description: latest.mensagem || '',
+        code: `#CARD-${cardId}`,
+        createdAt: latest.created_at || new Date().toISOString(),
+        isUnread: hasUnread,
+        isAttended: !hasUnread,
+        linkUrl: `/kanban?projectId=${latest.project_id || ''}&cardId=${cardId}`,
+        actionLabel: 'Abrir no Kanban',
+        onMarkRead: markCardRead,
+      });
+    });
+
+    orphanKbNotifs.forEach((n) => {
       items.push({
         id: `kb_notif_${n.id}`,
         source: 'kanban',
@@ -257,10 +426,10 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         itemType: 'notification',
         title: n.titulo || 'Atualização no Kanban',
         description: n.mensagem || '',
-        code: n.card_id ? `#CARD-${n.card_id}` : undefined,
         createdAt: n.created_at || new Date().toISOString(),
         isUnread: !n.lida,
-        linkUrl: `/kanban?projectId=${n.project_id || ''}&cardId=${n.card_id || ''}`,
+        isAttended: n.lida,
+        linkUrl: '/kanban',
         actionLabel: 'Abrir no Kanban',
         onMarkRead: () => onMarkKbRead(n.id),
       });
@@ -279,6 +448,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         code: `#RH-${item.comunicado.id}`,
         createdAt: item.comunicado.inicio || new Date().toISOString(),
         isUnread: !item.lida,
+        isAttended: item.lida,
         linkUrl: '#',
         actionLabel: 'Ver Comunicado',
         onMarkRead: () => onMarkRhRead(item.comunicado.id),
@@ -286,7 +456,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
       });
     });
 
-    // Sort by: Unread first, then newer date
+    // Sort: Unread first, then by createdAt desc
     return items.sort((a, b) => {
       if (a.isUnread && !b.isUnread) return -1;
       if (!a.isUnread && b.isUnread) return 1;
@@ -307,35 +477,45 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     onOpenRhModal,
   ]);
 
-  // Counts by source
+  // Counts of active pending items (excluding locally dismissed)
+  const activePendingItems = useMemo(() => {
+    return allItems.filter((i) => i.isUnread && !dismissedItemIds.has(i.id));
+  }, [allItems, dismissedItemIds]);
+
   const counts = useMemo(() => {
     return {
       all: allItems.length,
-      allUnread: allItems.filter((i) => i.isUnread).length,
-      service_desk: allItems.filter((i) => i.source === 'service_desk').length,
-      service_desk_unread: allItems.filter((i) => i.source === 'service_desk' && i.isUnread).length,
-      maintenance: allItems.filter((i) => i.source === 'maintenance').length,
-      maintenance_unread: allItems.filter((i) => i.source === 'maintenance' && i.isUnread).length,
-      preventive: allItems.filter((i) => i.source === 'preventive').length,
-      preventive_unread: allItems.filter((i) => i.source === 'preventive' && i.isUnread).length,
-      kanban: allItems.filter((i) => i.source === 'kanban').length,
-      kanban_unread: allItems.filter((i) => i.source === 'kanban' && i.isUnread).length,
-      rh: allItems.filter((i) => i.source === 'rh').length,
-      rh_unread: allItems.filter((i) => i.source === 'rh' && i.isUnread).length,
+      allPending: activePendingItems.length,
+      service_desk: activePendingItems.filter((i) => i.source === 'service_desk').length,
+      maintenance: activePendingItems.filter((i) => i.source === 'maintenance').length,
+      preventive: activePendingItems.filter((i) => i.source === 'preventive').length,
+      kanban: activePendingItems.filter((i) => i.source === 'kanban').length,
+      rh: activePendingItems.filter((i) => i.source === 'rh').length,
     };
-  }, [allItems]);
+  }, [allItems.length, activePendingItems]);
 
-  // Filtered items
+  // Filtered items based on viewMode ('pending' vs 'history'), source and search query
   const filteredItems = useMemo(() => {
     return allItems.filter((item) => {
+      const isDismissed = dismissedItemIds.has(item.id);
+
+      // In 'pending' mode, only show active unread items that have NOT been dismissed/attended
+      if (viewMode === 'pending') {
+        if (!item.isUnread || isDismissed) {
+          return false;
+        }
+      } else {
+        // In 'history' mode, show items that have already been attended or read or dismissed
+        if (item.isUnread && !isDismissed) {
+          return false;
+        }
+      }
+
       // Source filter
       if (selectedSource !== 'all' && item.source !== selectedSource) {
         return false;
       }
-      // Unread only
-      if (unreadOnly && !item.isUnread) {
-        return false;
-      }
+
       // Text search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -349,11 +529,33 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
       }
       return true;
     });
-  }, [allItems, selectedSource, unreadOnly, searchQuery]);
+  }, [allItems, dismissedItemIds, viewMode, selectedSource, searchQuery]);
 
-  // Global mark all read
+  // Handle single item mark read with IMMEDIATE OPTIMISTIC REMOVAL
+  const handleMarkItemRead = async (item: UnifiedWorkItem) => {
+    // Immediately remove from the notification list
+    setDismissedItemIds((prev) => new Set(prev).add(item.id));
+    if (item.onMarkRead) {
+      try {
+        await item.onMarkRead();
+      } catch (err) {
+        console.error('Erro ao marcar notificação como lida:', err);
+      }
+    }
+  };
+
+  // Global mark all read with IMMEDIATE OPTIMISTIC REMOVAL
   const handleMarkAllRead = useCallback(async () => {
     setIsMarkingAll(true);
+    // Optimistically remove all current unread items from the notification list
+    setDismissedItemIds((prev) => {
+      const next = new Set(prev);
+      allItems.forEach((i) => {
+        if (i.isUnread) next.add(i.id);
+      });
+      return next;
+    });
+
     try {
       await Promise.allSettled([
         onMarkAllSdRead(),
@@ -364,7 +566,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     } finally {
       setIsMarkingAll(false);
     }
-  }, [onMarkAllSdRead, onMarkAllPmRead, onMarkAllKbRead, onMarkRhRead, rhComunicados]);
+  }, [allItems, onMarkAllSdRead, onMarkAllPmRead, onMarkAllKbRead, onMarkRhRead, rhComunicados]);
 
   // Colors & styles by source
   const sourceMeta: Record<
@@ -462,10 +664,10 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                 <h2 className="text-xl font-bold tracking-tight text-white m-0">
                   Central de Notificações & Tarefas
                 </h2>
-                {counts.allUnread > 0 ? (
+                {counts.allPending > 0 ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 px-2.5 py-0.5 text-xs font-mono font-bold text-amber-300">
                     <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
-                    {counts.allUnread} pendente{counts.allUnread !== 1 ? 's' : ''}
+                    {counts.allPending} pendente{counts.allPending !== 1 ? 's' : ''}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 px-2 py-0.5 text-[11px] font-mono font-bold text-emerald-300">
@@ -474,8 +676,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                 )}
               </div>
               <p className="mt-1 text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Feed unificado de chamados do suporte, ordens de bancada, manutenções preventivas,
-                quadro Kanban e comunicados institucionais.
+                Itens atendidos saem automaticamente da fila para manter seu fluxo de trabalho limpo e focado.
               </p>
             </div>
           </div>
@@ -494,7 +695,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               </button>
             )}
 
-            {counts.allUnread > 0 && (
+            {counts.allPending > 0 && (
               <button
                 type="button"
                 onClick={handleMarkAllRead}
@@ -524,17 +725,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <span className="font-semibold flex items-center gap-1">
                 <MessageSquare size={13} /> Suporte
               </span>
-              {counts.service_desk_unread > 0 && (
+              {counts.service_desk > 0 && (
                 <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-lg font-bold text-white font-mono">{counts.service_desk}</span>
-              {counts.service_desk_unread > 0 && (
-                <span className="text-[10px] text-amber-300 font-mono">
-                  ({counts.service_desk_unread} pend.)
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">pendentes</span>
             </div>
           </button>
 
@@ -552,17 +749,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <span className="font-semibold flex items-center gap-1">
                 <Wrench size={13} /> Bancada
               </span>
-              {counts.maintenance_unread > 0 && (
+              {counts.maintenance > 0 && (
                 <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-lg font-bold text-white font-mono">{counts.maintenance}</span>
-              {counts.maintenance_unread > 0 && (
-                <span className="text-[10px] text-amber-300 font-mono">
-                  ({counts.maintenance_unread} pend.)
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">pendentes</span>
             </div>
           </button>
 
@@ -580,17 +773,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <span className="font-semibold flex items-center gap-1">
                 <ClipboardList size={13} /> Preventivas
               </span>
-              {counts.preventive_unread > 0 && (
+              {counts.preventive > 0 && (
                 <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-lg font-bold text-white font-mono">{counts.preventive}</span>
-              {counts.preventive_unread > 0 && (
-                <span className="text-[10px] text-amber-300 font-mono">
-                  ({counts.preventive_unread} pend.)
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">pendentes</span>
             </div>
           </button>
 
@@ -608,17 +797,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <span className="font-semibold flex items-center gap-1">
                 <Columns3 size={13} /> Kanban TI
               </span>
-              {counts.kanban_unread > 0 && (
+              {counts.kanban > 0 && (
                 <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-lg font-bold text-white font-mono">{counts.kanban}</span>
-              {counts.kanban_unread > 0 && (
-                <span className="text-[10px] text-amber-300 font-mono">
-                  ({counts.kanban_unread} pend.)
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">pendentes</span>
             </div>
           </button>
 
@@ -636,92 +821,97 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <span className="font-semibold flex items-center gap-1">
                 <Megaphone size={13} /> RH Avisos
               </span>
-              {counts.rh_unread > 0 && (
+              {counts.rh > 0 && (
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-lg font-bold text-white font-mono">{counts.rh}</span>
-              {counts.rh_unread > 0 && (
-                <span className="text-[10px] text-amber-300 font-mono">
-                  ({counts.rh_unread} pend.)
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono">pendentes</span>
             </div>
           </button>
         </div>
       </div>
 
-      {/* Barra de Filtros e Busca */}
+      {/* Barra de Filtros, Modo de Visualização e Busca */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-xl border border-brand-border bg-brand-card p-3 shadow-sm">
-        {/* Pílulas de Fonte */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Toggle Ativas/Pendentes vs Histórico de Atendidas */}
+        <div className="flex items-center rounded-xl bg-brand-dark/40 p-1 border border-brand-border">
+          <button
+            type="button"
+            onClick={() => setViewMode('pending')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'pending'
+                ? 'bg-brand-primary text-brand-dark shadow-sm'
+                : 'text-brand-muted hover:text-brand-text'
+            }`}
+          >
+            <Sparkles size={13} />
+            <span>Pendentes ({counts.allPending})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('history')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'history'
+                ? 'bg-brand-primary text-brand-dark shadow-sm'
+                : 'text-brand-muted hover:text-brand-text'
+            }`}
+          >
+            <History size={13} />
+            <span>Atendidas / Histórico</span>
+          </button>
+        </div>
+
+        {/* Pílulas de Módulo */}
+        <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             onClick={() => setSelectedSource('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
               selectedSource === 'all'
-                ? 'bg-brand-primary text-brand-dark shadow-sm'
-                : 'bg-brand-dark/40 text-brand-muted hover:text-brand-text border border-brand-border'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-brand-dark/30 text-brand-muted hover:text-brand-text border border-brand-border'
             }`}
           >
-            Todos ({counts.all})
+            Todos
           </button>
 
           {(
             [
-              ['service_desk', 'Suporte', MessageSquare, counts.service_desk],
-              ['maintenance', 'Bancada', Wrench, counts.maintenance],
-              ['preventive', 'Preventiva', ClipboardList, counts.preventive],
-              ['kanban', 'Kanban', Columns3, counts.kanban],
-              ['rh', 'RH', Megaphone, counts.rh],
+              ['service_desk', 'Suporte', MessageSquare],
+              ['maintenance', 'Bancada', Wrench],
+              ['preventive', 'Preventiva', ClipboardList],
+              ['kanban', 'Kanban', Columns3],
+              ['rh', 'RH', Megaphone],
             ] as const
-          ).map(([key, label, Icon, count]) => (
+          ).map(([key, label, Icon]) => (
             <button
               key={key}
               type="button"
               onClick={() => setSelectedSource(key)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
                 selectedSource === key
-                  ? 'bg-brand-primary text-brand-dark shadow-sm'
-                  : 'bg-brand-dark/40 text-brand-muted hover:text-brand-text border border-brand-border'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-brand-dark/30 text-brand-muted hover:text-brand-text border border-brand-border'
               }`}
             >
-              <Icon size={13} />
+              <Icon size={12} />
               <span>{label}</span>
-              <span className="opacity-75">({count})</span>
             </button>
           ))}
         </div>
 
-        {/* Busca e Toggle Não Lidos */}
-        <div className="flex items-center gap-2">
-          {/* Toggle Unread */}
-          <button
-            type="button"
-            onClick={() => setUnreadOnly(!unreadOnly)}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer border ${
-              unreadOnly
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 shadow-sm'
-                : 'bg-brand-dark/30 border-brand-border text-brand-muted hover:text-brand-text'
-            }`}
-            title="Alternar filtro para itens não lidos"
-          >
-            <Filter size={12} />
-            <span>Pendentes ({counts.allUnread})</span>
-          </button>
-
-          {/* Input busca */}
-          <div className="relative flex-1 sm:w-48">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted" />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-brand-border bg-brand-dark/30 pl-8 pr-3 py-1.5 text-xs text-brand-text focus:border-brand-primary focus:outline-none"
-            />
-          </div>
+        {/* Input busca */}
+        <div className="relative sm:w-44">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted" />
+          <input
+            type="text"
+            placeholder="Buscar..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-lg border border-brand-border bg-brand-dark/30 pl-8 pr-3 py-1.5 text-xs text-brand-text focus:border-brand-primary focus:outline-none"
+          />
         </div>
       </div>
 
@@ -730,21 +920,24 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         {filteredItems.length === 0 ? (
           <div className="rounded-2xl border border-brand-border bg-brand-card p-12 text-center shadow-sm">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-dark/40 text-brand-muted border border-brand-border">
-              <Inbox size={28} />
+              {viewMode === 'pending' ? <Check size={28} className="text-emerald-500" /> : <Inbox size={28} />}
             </div>
-            <h3 className="text-base font-bold text-brand-text">Nenhuma notificação encontrada</h3>
+            <h3 className="text-base font-bold text-brand-text">
+              {viewMode === 'pending' ? 'Tudo em dia!' : 'Nenhum histórico encontrado'}
+            </h3>
             <p className="mt-1 text-xs text-brand-muted max-w-md mx-auto">
-              {unreadOnly
-                ? 'Você não possui tarefas ou notificações pendentes neste filtro.'
-                : 'Nenhuma notificação ou ordem de serviço atribuída a você no momento.'}
+              {viewMode === 'pending'
+                ? 'Todas as suas notificações e ordens foram atendidas ou arquivadas. Bom trabalho!'
+                : 'Nenhuma notificação atendida arquivada no histórico recente.'}
             </p>
-            {unreadOnly && (
+            {viewMode === 'pending' && (
               <button
                 type="button"
-                onClick={() => setUnreadOnly(false)}
+                onClick={() => setViewMode('history')}
                 className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-dark px-3 py-1.5 text-xs font-mono font-bold text-brand-primary hover:bg-brand-primary/10 transition cursor-pointer"
               >
-                Ver todos os itens ({counts.all})
+                <History size={13} />
+                <span>Ver histórico de atendidas</span>
               </button>
             )}
           </div>
@@ -760,17 +953,17 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                 className={`relative overflow-hidden rounded-xl border transition-all duration-200 hover:shadow-md hover:border-brand-primary/40 ${
                   meta.borderAccent
                 } border-l-[5px] ${
-                  item.isUnread
+                  item.isUnread && !dismissedItemIds.has(item.id)
                     ? 'border-brand-border bg-white dark:bg-slate-900 shadow-sm'
-                    : 'border-brand-border/70 bg-brand-card/70 opacity-90'
+                    : 'border-brand-border/70 bg-brand-card/70 opacity-85'
                 }`}
               >
                 {/* Indicador pulsante de não lido */}
-                {item.isUnread && (
+                {item.isUnread && !dismissedItemIds.has(item.id) && (
                   <span
-                    aria-label="Não lido"
+                    aria-label="Pendente"
                     className="absolute right-3.5 top-3.5 h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm animate-pulse"
-                    title="Item não lido ou pendente"
+                    title="Item pendente de atendimento"
                   />
                 )}
 
@@ -851,30 +1044,26 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                     <div className="text-[11px] font-mono text-brand-muted">
                       {item.itemType === 'task' ? (
                         <span className="inline-flex items-center gap-1 text-blue-600 font-semibold">
-                          <Layers size={12} /> Tarefa atribuída a você
+                          <Layers size={12} /> Tarefa operacional
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1">
-                          <Bell size={12} /> Notificação do sistema
+                          <Bell size={12} /> Notificação
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* Botão Marcar como Lido */}
-                      {item.isUnread && item.onMarkRead && (
+                      {/* Botão Marcar como Lido / Ciente (Remove imediatamente da lista) */}
+                      {item.isUnread && !dismissedItemIds.has(item.id) && (
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (item.onMarkRead) {
-                              await item.onMarkRead();
-                            }
-                          }}
+                          onClick={() => handleMarkItemRead(item)}
                           className="inline-flex items-center gap-1 rounded-lg border border-brand-border bg-brand-dark/40 px-2.5 py-1 text-xs font-mono font-semibold text-brand-muted hover:text-brand-text hover:bg-brand-primary/10 transition cursor-pointer"
-                          title="Confirmar ciência e marcar como lida"
+                          title="Marcar como atendida/lida e remover da notificação"
                         >
                           <Check size={13} className="text-emerald-500" />
-                          <span>Marcar lido</span>
+                          <span>Atendido / Lido</span>
                         </button>
                       )}
 
@@ -882,7 +1071,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                       {item.onOpenDetail ? (
                         <button
                           type="button"
-                          onClick={item.onOpenDetail}
+                          onClick={() => {
+                            if (item.onMarkRead) {
+                              void item.onMarkRead();
+                            }
+                            setDismissedItemIds((prev) => new Set(prev).add(item.id));
+                            item.onOpenDetail?.();
+                          }}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-brand-dark shadow-sm hover:bg-brand-primary/90 transition cursor-pointer"
                         >
                           <span>{item.actionLabel}</span>
@@ -891,6 +1086,12 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                       ) : (
                         <Link
                           to={item.linkUrl}
+                          onClick={() => {
+                            if (item.onMarkRead) {
+                              void item.onMarkRead();
+                            }
+                            setDismissedItemIds((prev) => new Set(prev).add(item.id));
+                          }}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-brand-dark shadow-sm hover:bg-brand-primary/90 transition cursor-pointer"
                         >
                           <span>{item.actionLabel}</span>

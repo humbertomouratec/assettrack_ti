@@ -418,7 +418,7 @@ export const BorrowingsPage: React.FC = () => {
         {[
           { label: 'Aguardando aprovação', value: borrowingMetrics.pending, hint: 'solicitações na fila', status: 'pendente', icon: Clock, tone: 'text-blue-600 bg-blue-50' },
           { label: 'Prontos para entrega', value: borrowingMetrics.approved, hint: 'aprovados pela equipe', status: 'aprovada', icon: CheckCircle2, tone: 'text-amber-600 bg-amber-50' },
-          { label: 'Em uso', value: borrowingMetrics.delivered, hint: 'ativos com colaboradores', status: 'entregue', icon: User, tone: 'text-violet-600 bg-violet-50' },
+          { label: 'Em uso', value: borrowingMetrics.delivered, hint: 'ativos com colaboradores', status: 'entregue', icon: User, tone: 'text-teal-600 bg-teal-50' },
           { label: 'Devolvidos', value: borrowingMetrics.returned, hint: 'retornaram ao inventário', status: 'devolvida', icon: Undo2, tone: 'text-emerald-600 bg-emerald-50' },
         ].map(({ label, value, hint, status, icon: Icon, tone }) => <button type="button" key={label} onClick={() => setStatusFilter(statusFilter === status ? '' : status)} className={`rounded-2xl border bg-brand-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${statusFilter === status ? 'border-brand-primary ring-2 ring-brand-primary/15' : 'border-brand-border'}`} aria-label={`Filtrar por ${label}`}><div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-2xl font-bold tracking-tight text-brand-text">{value}</span></div><div className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-text">{label}</div><div className="mt-1 text-xs text-brand-muted">{hint}</div></button>)}
       </div>

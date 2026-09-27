@@ -505,7 +505,7 @@ export const ServiceDeskPage: React.FC = () => {
             { label: 'Chamados em aberto', value: openTicketCount, hint: 'abertos ou em atendimento', icon: MessageSquare, tone: 'text-blue-600 bg-blue-50' },
             { label: 'Prioridade urgente', value: ticketPriorityCounts.urgente || 0, hint: 'resposta imediata', icon: AlertCircle, tone: 'text-red-600 bg-red-50' },
             { label: 'Resolvidos', value: resolvedTicketCount, hint: `${tickets.length} chamados no total`, icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50' },
-            { label: 'Categorias ativas', value: categories.length, hint: `${definitions.length} serviços disponíveis`, icon: Filter, tone: 'text-violet-600 bg-violet-50' },
+            { label: 'Categorias ativas', value: categories.length, hint: `${definitions.length} serviços disponíveis`, icon: Filter, tone: 'text-cyan-600 bg-cyan-50' },
           ].map(({ label, value, hint, icon: Icon, tone }) => <button type="button" key={label} onClick={() => { if (label === 'Chamados em aberto') setStatusFilter('aberto'); if (label === 'Prioridade urgente') setPriorityFilter('urgente'); }} className="rounded-2xl border border-brand-border bg-brand-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-2xl font-bold tracking-tight text-brand-text">{value}</span></div><div className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-text">{label}</div><div className="mt-1 text-xs text-brand-muted">{hint}</div></button>)}
         </div>
 

@@ -34,13 +34,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <div className="app-shell w-full h-[100dvh] max-h-[100dvh] flex text-brand-text relative overflow-hidden">
+      <a href="#main-content" className="skip-link">
+        Pular para o conteúdo principal
+      </a>
       <Sidebar
         isOpenMobile={isMobileDrawerOpen}
         onCloseMobile={() => setIsMobileDrawerOpen(false)}
       />
       <div className="flex-1 flex min-w-0 flex-col h-full max-h-[100dvh] overflow-hidden">
         <Header onOpenMobileMenu={() => setIsMobileDrawerOpen(true)} />
-        <main className="app-content flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-8 overscroll-contain">
+        <main id="main-content" tabIndex={-1} className="app-content flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-8 overscroll-contain focus:outline-none">
           {children}
           <footer className="mt-8 border-t border-white/25 pt-3 pb-1 text-center text-xs sm:text-sm text-[#172b4d]/60">
             © {new Date().getFullYear()} AssetTrack TI. Todos os direitos reservados.

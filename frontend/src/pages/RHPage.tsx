@@ -20,7 +20,7 @@ const statusStyles: Record<string, string> = {
 const employeeStatus: Record<RHStatusType, { label: string; className: string; calendarClassName: string }> = {
   trabalhando: { label: 'Trabalhando', className: 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10', calendarClassName: 'border-emerald-300 border-l-emerald-600 bg-emerald-50 text-emerald-800' },
   folga: { label: 'Folga', className: 'border-sky-500/30 text-sky-600 bg-sky-500/10', calendarClassName: 'border-sky-300 border-l-sky-600 bg-sky-50 text-sky-800' },
-  ferias: { label: 'Férias', className: 'border-violet-500/30 text-violet-600 bg-violet-500/10', calendarClassName: 'border-violet-300 border-l-violet-600 bg-violet-50 text-violet-800' },
+  ferias: { label: 'Férias', className: 'border-teal-500/30 text-teal-600 bg-teal-500/10', calendarClassName: 'border-teal-300 border-l-teal-600 bg-teal-50 text-teal-800' },
   banco_horas: { label: 'Banco de horas', className: 'border-amber-500/30 text-amber-700 bg-amber-500/10', calendarClassName: 'border-amber-300 border-l-amber-600 bg-amber-50 text-amber-800' },
   desligado: { label: 'Desligado', className: 'border-red-500/30 text-red-600 bg-red-500/10', calendarClassName: 'border-red-300 border-l-red-600 bg-red-50 text-red-800' },
 };

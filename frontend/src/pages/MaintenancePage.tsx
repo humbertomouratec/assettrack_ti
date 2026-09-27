@@ -311,7 +311,7 @@ export const MaintenancePage: React.FC = () => {
           { label: 'Fila de espera', value: totalPending, hint: 'aguardando triagem', icon: Clock, tone: 'text-blue-600 bg-blue-50' },
           { label: 'Na bancada', value: totalInWorkshop, hint: 'reparos em andamento', icon: AlertCircle, tone: 'text-amber-600 bg-amber-50' },
           { label: 'Reparos concluídos', value: totalConcluded, hint: 'finalizados ou entregues', icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50' },
-          { label: 'Custo acumulado', value: formatCurrency(totalSpent), hint: 'investimento em reparos', icon: DollarSign, tone: 'text-violet-600 bg-violet-50' },
+          { label: 'Custo acumulado', value: formatCurrency(totalSpent), hint: 'investimento em reparos', icon: DollarSign, tone: 'text-emerald-600 bg-emerald-50' },
         ].map(({ label, value, hint, icon: Icon, tone }) => (
           <div key={label} className="rounded-2xl border border-brand-border bg-brand-card p-4 shadow-sm">
             <div className="flex items-start justify-between gap-2"><span className={`rounded-xl p-2 ${tone}`}><Icon size={17} /></span><span className="text-2xl font-bold tracking-tight text-brand-text">{value}</span></div>
@@ -419,7 +419,7 @@ export const MaintenancePage: React.FC = () => {
                     : request.status === 'aceita'
                       ? 'text-amber-400 bg-amber-400/10 border-amber-400/20'
                       : request.status === 'aguardando_entrega'
-                        ? 'text-purple-400 bg-purple-400/10 border-purple-400/20'
+                        ? 'text-teal-400 bg-teal-400/10 border-teal-400/20'
                         : request.status === 'concluida'
                           ? 'text-brand-primary bg-brand-primary/10 border-brand-primary/20'
                           : 'text-red-400 bg-red-500/10 border-red-500/20'
