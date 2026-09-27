@@ -99,6 +99,10 @@ func main() {
 		&models.WebhookLog{},
 		&models.SystemSetting{},
 		&models.EmailLog{},
+		&models.UserGamificationProfile{},
+		&models.GamificationActivityLog{},
+		&models.GamificationBadge{},
+		&models.UserBadge{},
 	); err != nil {
 		log.Fatalf("❌ Auto-migration failed: %v", err)
 	}

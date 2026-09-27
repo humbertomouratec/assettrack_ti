@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, CircleHelp, Home, Search, Settings, ShieldCheck, ShieldAlert, User as UserIcon, Menu, ArrowRight, Cpu, MessageSquare, Wrench, ClipboardList, Columns3, BellRing, ArrowLeftRight, Briefcase, FileSignature, Users, Webhook, Database, QrCode, BookOpen, Activity } from 'lucide-react';
+import { Bell, CircleHelp, Home, Search, Settings, ShieldCheck, ShieldAlert, User as UserIcon, Menu, ArrowRight, Cpu, MessageSquare, Wrench, ClipboardList, Columns3, BellRing, ArrowLeftRight, Briefcase, FileSignature, Users, Webhook, Database, QrCode, BookOpen, Activity, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { triggerEmergencyAlertModal } from '../emergency/EmergencyGlobalHandler';
 import { OfflineStatusIndicator } from './OfflineStatusIndicator';
+import { HeaderGamificationWidget } from '../gamification/HeaderGamificationWidget';
 
 interface HeaderProps {
   onOpenMobileMenu?: () => void;
@@ -35,6 +36,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { name: 'Webhooks', path: '/webhooks', keywords: 'integrações eventos', icon: Webhook, roleLimit: ['admin'] },
   { name: 'Backup & Restore', path: '/backups', keywords: 'backup restauração segurança banco', icon: Database, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Meu Crachá QR', path: '/badge', keywords: 'crachá qr código identificação', icon: QrCode },
+  { name: 'Gamificação & Conquistas', path: '/gamificacao', keywords: 'gamificação ranking níveis conquistas badges pontos xp técnicos', icon: Trophy },
   { name: 'Setores', path: '/setores', keywords: 'departamentos organização', icon: ClipboardList, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Configurações', path: '/configuracoes', keywords: 'configuração preferências sistema', icon: Settings, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Logs de E-mail', path: '/logs-email', keywords: 'email mensagens histórico', icon: Bell, roleLimit: ['admin'] },
@@ -203,6 +205,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
         {/* Offline Status & Sync Indicator */}
         <OfflineStatusIndicator />
 
+        {/* Gamification Widget */}
+        <HeaderGamificationWidget />
+
         {/* Emergency Trigger Button for ALL users on Desktop / Web */}
         <button
           onClick={triggerEmergencyAlertModal}
@@ -219,7 +224,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             <span>ROOT</span>
           </div>
         )}
-        <Link to="/alertas" className="grid h-8 w-8 place-items-center rounded bg-white/16 hover:bg-white/28" title="Notificações" aria-label="Notificações">
+        <Link to="/profile?tab=notificacoes" className="grid h-8 w-8 place-items-center rounded bg-white/16 hover:bg-white/28" title="Central de Notificações & Tarefas" aria-label="Central de Notificações & Tarefas">
           <Bell size={16} />
         </Link>
         <Link to="/manual" className="hidden sm:grid h-8 w-8 place-items-center rounded bg-white/16 hover:bg-white/28" title="Manual do sistema" aria-label="Manual do sistema"><CircleHelp size={16} /></Link>

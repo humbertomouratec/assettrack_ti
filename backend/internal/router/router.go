@@ -121,6 +121,14 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	aiHandler := handler.NewAIHandler(aiSvc)
 	appHandler := handler.NewAppHandler()
 
+	// Gamification
+	gamificationRepo := repository.NewGamificationRepository(db)
+	gamificationSvc := service.NewGamificationService(gamificationRepo)
+	gamificationHandler := handler.NewGamificationHandler(gamificationSvc)
+	serviceDeskHandler.SetGamificationService(gamificationSvc)
+	preventiveHandler.SetGamificationService(gamificationSvc)
+	maintenanceHandler.SetGamificationService(gamificationSvc)
+
 	// Auth middleware helper
 	authMW := middleware.AuthMiddleware(authSvc, userRepo)
 	rActive := middleware.RequireActive()
@@ -542,6 +550,14 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		chat := v1.Group("/chat", authMW, rActive)
 		{
 			chat.POST("", aiHandler.Chat)
+		}
+
+		// Gamification routes
+		gamification := v1.Group("/gamification", authMW, rActive)
+		{
+			gamification.GET("/me", gamificationHandler.GetMyProfile)
+			gamification.GET("/leaderboard", gamificationHandler.GetLeaderboard)
+			gamification.GET("/user/:id", gamificationHandler.GetUserProfileByID)
 		}
 	}
 

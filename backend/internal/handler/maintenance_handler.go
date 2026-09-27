@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -8,13 +9,15 @@ import (
 	"github.com/assettrack/backend/internal/middleware"
 	"github.com/assettrack/backend/internal/models"
 	"github.com/assettrack/backend/internal/repository"
+	"github.com/assettrack/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
 type MaintenanceHandler struct {
-	repo      *repository.MaintenanceRepository
-	assetRepo *repository.AssetRepository
-	txRepo    *repository.TransactionRepository
+	repo            *repository.MaintenanceRepository
+	assetRepo       *repository.AssetRepository
+	txRepo          *repository.TransactionRepository
+	gamificationSvc *service.GamificationService
 }
 
 func NewMaintenanceHandler(
@@ -27,6 +30,10 @@ func NewMaintenanceHandler(
 		assetRepo: assetRepo,
 		txRepo:    txRepo,
 	}
+}
+
+func (h *MaintenanceHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 func (h *MaintenanceHandler) ListRequests(c *gin.Context) {
@@ -280,6 +287,25 @@ func (h *MaintenanceHandler) ConcludeRequest(c *gin.Context) {
 	if err := h.repo.UpdateRequest(req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Falha ao salvar conclusão da solicitação: " + err.Error()})
 		return
+	}
+
+	// Gamificação: premiar técnico pela manutenção corretiva / reparo concluído
+	if h.gamificationSvc != nil {
+		techID := user.ID
+		if req.ResponsavelID != nil && *req.ResponsavelID > 0 {
+			techID = *req.ResponsavelID
+		}
+		go func(tID uint, mID uint) {
+			_, _ = h.gamificationSvc.AwardActivityXP(
+				tID,
+				"maintenance",
+				&mID,
+				70,
+				35,
+				fmt.Sprintf("Manutenção/Reparo #%d concluído com sucesso", mID),
+				0,
+			)
+		}(techID, maint.ID)
 	}
 
 	c.JSON(http.StatusOK, req)

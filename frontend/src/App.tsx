@@ -25,6 +25,7 @@ const EmailLogsPage = lazy(() => import('./pages/EmailLogsPage').then(m => ({ de
 const SetoresPage = lazy(() => import('./pages/SetoresPage').then(m => ({ default: m.SetoresPage })));
 const MonitoramentoPage = lazy(() => import('./pages/MonitoramentoPage').then(m => ({ default: m.MonitoramentoPage })));
 const ManualPage = lazy(() => import('./pages/ManualPage').then(m => ({ default: m.ManualPage })));
+const GamificationDashboardPage = lazy(() => import('./pages/GamificationDashboardPage').then(m => ({ default: m.GamificationDashboardPage })));
 import { AppUpdateNotifier } from './components/layout/AppUpdateNotifier';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initializeAndroidNotifications } from './utils/androidNotifications';
@@ -214,6 +215,16 @@ const App: React.FC = () => {
               </MainLayout>
             }
           />
+          <Route
+            path="/gamificacao"
+            element={
+              <MainLayout>
+                <GamificationDashboardPage />
+              </MainLayout>
+            }
+          />
+          <Route path="/ranking" element={<Navigate to="/gamificacao" replace />} />
+          <Route path="/conquistas" element={<Navigate to="/gamificacao" replace />} />
           <Route
             path="/profile"
             element={

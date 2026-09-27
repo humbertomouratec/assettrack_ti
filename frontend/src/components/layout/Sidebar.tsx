@@ -24,7 +24,8 @@ import {
   Activity,
   BookOpen,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Trophy
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -87,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
     { name: 'Manutenções', path: '/manutencoes', icon: Wrench, roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'] },
     { name: 'Prev. Programada', path: '/manutencao-preventiva', icon: ClipboardList, roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'], feature: 'preventive_maintenance_enabled' as const },
     { name: 'Kanban', path: '/kanban', icon: Columns3, feature: 'kanban_enabled' as const },
+    { name: 'Gamificação', path: '/gamificacao', icon: Trophy },
     { name: 'Alertas', path: '/alertas', icon: BellRing, roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'] },
     { name: 'Empréstimos', path: '/emprestimos', icon: ArrowLeftRight },
     { name: 'Compras', path: '/compras', icon: Briefcase, roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'comprador'], feature: 'purchases_enabled' as const },

@@ -64,6 +64,7 @@ type PreventiveHandler struct {
 	stockRepo      *repository.ProcurementStockRepository
 	settingsRepo   repository.SystemSettingsRepository
 	emailSvc       service.EmailService
+	gamificationSvc *service.GamificationService
 }
 
 type checklistItemPayload struct {
@@ -117,6 +118,10 @@ func NewPreventiveHandler(
 		settingsRepo:   settingsRepo,
 		emailSvc:       emailSvc,
 	}
+}
+
+func (h *PreventiveHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 // pmAdmin checks roles allowed to delete/cancel (admin, gerente_ti, gerente_infra).
@@ -1240,6 +1245,25 @@ func (h *PreventiveHandler) CompleteOrder(c *gin.Context) {
 	// Notify managers
 	h.notifyOrderCompleted(*order, user.Nome)
 	h.syncKanbanOrder(order.ID, user.ID)
+
+	// Gamificação: premiar técnico pela preventiva concluída
+	if h.gamificationSvc != nil {
+		techID := user.ID
+		if order.TecnicoID != nil && *order.TecnicoID > 0 {
+			techID = *order.TecnicoID
+		}
+		go func(tID uint, ordID uint, cod string) {
+			_, _ = h.gamificationSvc.AwardActivityXP(
+				tID,
+				"preventive_maintenance",
+				&ordID,
+				80,
+				40,
+				fmt.Sprintf("OS Preventiva %s concluída", cod),
+				30,
+			)
+		}(techID, order.ID, order.Numero)
+	}
 
 	c.JSON(http.StatusOK, order)
 }
