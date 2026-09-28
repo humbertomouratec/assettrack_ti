@@ -68,13 +68,25 @@ type LeaderboardEntry struct {
 	Posicao    int    `json:"posicao"`
 }
 
-// GetLeaderboardVitalicio retorna o ranking geral de XP acumulado
+func (r *GamificationRepository) GetUser(userID uint, user *models.User) error {
+	return r.db.First(user, userID).Error
+}
+
+// GetLeaderboardVitalicio retorna o ranking geral de XP acumulado (exclusivo para gerentes, técnicos e admins)
 func (r *GamificationRepository) GetLeaderboardVitalicio(limit, offset int) ([]LeaderboardEntry, int64, error) {
+	validRoles := []string{models.RoleAdmin, models.RoleGerente, models.RoleGerenteInfra, models.RoleTecnico}
+
 	var total int64
-	r.db.Model(&models.UserGamificationProfile{}).Count(&total)
+	r.db.Model(&models.UserGamificationProfile{}).
+		Joins("JOIN users ON users.id = user_gamification_profiles.user_id").
+		Where("users.role IN ? AND users.is_active = true", validRoles).
+		Count(&total)
 
 	var profiles []models.UserGamificationProfile
-	err := r.db.Preload("User").Order("xp_total desc, updated_at asc").
+	err := r.db.Joins("JOIN users ON users.id = user_gamification_profiles.user_id").
+		Where("users.role IN ? AND users.is_active = true", validRoles).
+		Preload("User").
+		Order("user_gamification_profiles.xp_total desc, user_gamification_profiles.updated_at asc").
 		Limit(limit).Offset(offset).Find(&profiles).Error
 	if err != nil {
 		return nil, 0, err
@@ -127,11 +139,14 @@ func (r *GamificationRepository) GetLeaderboardPeriodo(since time.Time, limit in
 		Atividades int   `gorm:"column:atividades_count"`
 	}
 
+	validRoles := []string{models.RoleAdmin, models.RoleGerente, models.RoleGerenteInfra, models.RoleTecnico}
+
 	var scores []AggregatedScore
 	err := r.db.Model(&models.GamificationActivityLog{}).
-		Select("user_id, sum(xp_ganho) as xp_soma, count(*) as atividades_count").
-		Where("created_at >= ?", since).
-		Group("user_id").
+		Joins("JOIN users ON users.id = gamification_activity_logs.user_id").
+		Where("gamification_activity_logs.created_at >= ? AND users.role IN ? AND users.is_active = true", since, validRoles).
+		Select("gamification_activity_logs.user_id, sum(gamification_activity_logs.xp_ganho) as xp_soma, count(*) as atividades_count").
+		Group("gamification_activity_logs.user_id").
 		Order("xp_soma desc").
 		Limit(limit).
 		Scan(&scores).Error

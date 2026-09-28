@@ -36,7 +36,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { name: 'Webhooks', path: '/webhooks', keywords: 'integrações eventos', icon: Webhook, roleLimit: ['admin'] },
   { name: 'Backup & Restore', path: '/backups', keywords: 'backup restauração segurança banco', icon: Database, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Meu Crachá QR', path: '/badge', keywords: 'crachá qr código identificação', icon: QrCode },
-  { name: 'Gamificação & Conquistas', path: '/gamificacao', keywords: 'gamificação ranking níveis conquistas badges pontos xp técnicos', icon: Trophy },
+  { name: 'Gamificação & Conquistas', path: '/gamificacao', keywords: 'gamificação ranking níveis conquistas badges pontos xp técnicos', icon: Trophy, roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'] },
   { name: 'Setores', path: '/setores', keywords: 'departamentos organização', icon: ClipboardList, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Configurações', path: '/configuracoes', keywords: 'configuração preferências sistema', icon: Settings, roleLimit: ['admin', 'gerente_ti', 'gerente_infra'] },
   { name: 'Logs de E-mail', path: '/logs-email', keywords: 'email mensagens histórico', icon: Bell, roleLimit: ['admin'] },
@@ -47,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const navigate = useNavigate();
   const canAccessSettings = ['admin', 'gerente_ti', 'gerente_infra'].includes(user?.role?.toLowerCase() || '');
   const userRole = user?.role?.toLowerCase() || '';
+  const canAccessGamification = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(userRole);
   const hasRHManagement = !!user?.has_rh_management;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -54,8 +55,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const searchRef = useRef<HTMLLabelElement>(null);
 
   const availableSearchItems = useMemo(
-    () => SEARCH_ITEMS.filter((item) => !item.roleLimit || item.roleLimit.includes(userRole) || (item.path === '/rh' && hasRHManagement)),
-    [hasRHManagement, userRole],
+    () =>
+      SEARCH_ITEMS.filter((item) => {
+        if (item.path === '/gamificacao' && !canAccessGamification) return false;
+        return !item.roleLimit || item.roleLimit.includes(userRole) || (item.path === '/rh' && hasRHManagement);
+      }),
+    [canAccessGamification, hasRHManagement, userRole],
   );
 
   const searchResults = useMemo(() => {
@@ -206,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
         <OfflineStatusIndicator />
 
         {/* Gamification Widget */}
-        <HeaderGamificationWidget />
+        {canAccessGamification && <HeaderGamificationWidget />}
 
         {/* Emergency Trigger Button for ALL users on Desktop / Web */}
         <button

@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const canAccessSettings = ['admin', 'gerente_ti', 'gerente_infra'].includes(user?.role?.toLowerCase() || '');
+  const canAccessGamification = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(user?.role?.toLowerCase() || '');
 
   useEffect(() => {
     checkAuth();
@@ -218,13 +219,17 @@ const App: React.FC = () => {
           <Route
             path="/gamificacao"
             element={
-              <MainLayout>
-                <GamificationDashboardPage />
-              </MainLayout>
+              canAccessGamification ? (
+                <MainLayout>
+                  <GamificationDashboardPage />
+                </MainLayout>
+              ) : (
+                <Navigate to="/" replace />
+              )
             }
           />
-          <Route path="/ranking" element={<Navigate to="/gamificacao" replace />} />
-          <Route path="/conquistas" element={<Navigate to="/gamificacao" replace />} />
+          <Route path="/ranking" element={<Navigate to={canAccessGamification ? "/gamificacao" : "/"} replace />} />
+          <Route path="/conquistas" element={<Navigate to={canAccessGamification ? "/gamificacao" : "/"} replace />} />
           <Route
             path="/profile"
             element={

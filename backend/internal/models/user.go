@@ -76,5 +76,11 @@ func (u *User) CanManageRH() bool {
 		u.Role == RoleGerente || u.Role == RoleGerenteInfra
 }
 
+// CanAccessGamification checks if user can view/participate in gamification (admin, gerente_ti, gerente_infra, tecnico)
+func (u *User) CanAccessGamification() bool {
+	return u.Role == RoleAdmin || u.Role == RoleGerente ||
+		u.Role == RoleGerenteInfra || u.Role == RoleTecnico
+}
+
 // HasPIN returns whether user has a PIN configured
 func (u *User) HasPIN() bool { return u.PINHash != nil && *u.PINHash != "" }

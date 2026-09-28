@@ -136,6 +136,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	rManager := middleware.RequireManagerOrAbove()
 	rManagerOrRH := middleware.RequireManagerOrRH()
 	rRH := middleware.RequireRH()
+	rGamification := middleware.RequireGamificationAccess()
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -552,8 +553,8 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			chat.POST("", aiHandler.Chat)
 		}
 
-		// Gamification routes
-		gamification := v1.Group("/gamification", authMW, rActive)
+		// Gamification routes (acesso exclusivo: gerentes, técnicos e administradores)
+		gamification := v1.Group("/gamification", authMW, rActive, rGamification)
 		{
 			gamification.GET("/me", gamificationHandler.GetMyProfile)
 			gamification.GET("/leaderboard", gamificationHandler.GetLeaderboard)

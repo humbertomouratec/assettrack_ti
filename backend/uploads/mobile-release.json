@@ -1,9 +1,9 @@
 {
-  "version_code": 1790361274,
-  "version_name": "2026.09.25.1834",
-  "release_date": "2026-09-25T18:34:34Z",
+  "version_code": 1790602561,
+  "version_name": "2026.09.28.1336",
+  "release_date": "2026-09-28T13:36:01Z",
   "apk_filename": "app-release.apk",
-  "apk_size_bytes": 8247227,
+  "apk_size_bytes": 8279549,
   "apk_size_formatted": "7.9 MB",
   "min_android_version": "Android 7.0 (Nougat) ou superior",
   "release_notes": "• APK anexado manualmente após build realizado via terminal.\n• Download salvo no portal de backups e distribuição.\n• Metadados de release atualizados no anexo."

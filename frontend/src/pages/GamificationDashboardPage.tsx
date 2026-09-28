@@ -25,6 +25,7 @@ import {
 
 export const GamificationDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const isAuthorized = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(user?.role?.toLowerCase() || '');
   const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'badges' | 'history'>('overview');
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<'all' | 'monthly' | 'weekly'>('all');
   const [badgeCategoryFilter, setBadgeCategoryFilter] = useState<string>('all');
@@ -37,6 +38,7 @@ export const GamificationDashboardPage: React.FC = () => {
   } = useQuery({
     queryKey: ['my-gamification-profile'],
     queryFn: getMyGamificationProfile,
+    enabled: isAuthorized,
     staleTime: 30 * 1000,
   });
 
@@ -47,6 +49,7 @@ export const GamificationDashboardPage: React.FC = () => {
   } = useQuery({
     queryKey: ['gamification-leaderboard', leaderboardPeriod],
     queryFn: () => getGamificationLeaderboard(leaderboardPeriod),
+    enabled: isAuthorized,
     staleTime: 30 * 1000,
   });
 
@@ -70,6 +73,20 @@ export const GamificationDashboardPage: React.FC = () => {
     if (badgeCategoryFilter === 'all') return badges;
     return badges.filter((b) => b.categoria === badgeCategoryFilter);
   }, [badges, badgeCategoryFilter]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center">
+        <div className="rounded-full bg-amber-50 p-4 text-amber-600 mb-4 border border-amber-200">
+          <Trophy className="w-10 h-10 opacity-70" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">Acesso Restrito</h2>
+        <p className="text-sm text-slate-500 max-w-md mt-2">
+          O módulo de gamificação e produtividade está disponível exclusivamente para técnicos, gerentes e administradores.
+        </p>
+      </div>
+    );
+  }
 
   if (loadingProfile) {
     return (

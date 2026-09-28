@@ -136,6 +136,16 @@ func (s *GamificationService) AwardActivityXP(
 		return nil, nil
 	}
 
+	// Verify that user is eligible for gamification (admin, gerente, tecnico)
+	var user models.User
+	if err := s.repo.GetUser(userID, &user); err != nil {
+		return nil, err
+	}
+	if !user.IsActive || !user.CanAccessGamification() {
+		// Non-technical users / regular users do not participate in gamification
+		return nil, nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

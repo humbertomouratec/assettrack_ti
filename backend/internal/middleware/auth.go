@@ -142,6 +142,20 @@ func RequireSupplierManager() gin.HandlerFunc {
 	}
 }
 
+// RequireGamificationAccess ensures gamification is accessible only to gerentes, tecnicos and admins
+func RequireGamificationAccess() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := GetCurrentUser(c)
+		if user == nil || !user.CanAccessGamification() {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"detail": "Acesso exclusivo para administradores, gerentes e técnicos",
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
 // RequireRH ensures the personnel portal is managed only by RH and admins.
 func RequireRH() gin.HandlerFunc {
 	return func(c *gin.Context) {

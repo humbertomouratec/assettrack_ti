@@ -65,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
   const { user, logout } = useAuthStore();
   const location = useLocation();
   const userRole = user?.role?.toLowerCase() || '';
+  const isGamificationAllowed = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(userRole);
   const hasRHManagement = !!user?.has_rh_management;
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -141,15 +142,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
           roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'],
           keywords: 'monitor tv noc chamados tempo real',
         },
-        {
-          name: 'Gamificação & XP',
-          path: '/gamificacao',
-          icon: Trophy,
-          subtitle: 'Ranking, níveis e conquistas',
-          badge: 'XP',
-          badgeColor: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
-          keywords: 'gamificacao conquistas ranking pontos trofeus tecnicos',
-        },
+        ...(isGamificationAllowed
+          ? [
+              {
+                name: 'Gamificação & XP',
+                path: '/gamificacao',
+                icon: Trophy,
+                subtitle: 'Ranking, níveis e conquistas',
+                badge: 'XP',
+                badgeColor: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
+                roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'],
+                keywords: 'gamificacao conquistas ranking pontos trofeus tecnicos',
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -319,7 +325,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
         },
       ],
     },
-  ], []);
+  ], [isGamificationAllowed]);
 
   // Filter groups and items based on roles, feature flags and search query
   const visibleGroups = useMemo(() => {

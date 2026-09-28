@@ -1,18 +1,24 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useAuthStore } from '../../stores/authStore';
 import { getMyGamificationProfile } from '../../api/gamification';
 import { Flame } from 'lucide-react';
 
 export const HeaderGamificationWidget: React.FC = () => {
+  const { user } = useAuthStore();
+  const userRole = user?.role?.toLowerCase() || '';
+  const canAccessGamification = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(userRole);
+
   const { data, isLoading } = useQuery({
     queryKey: ['my-gamification-profile'],
     queryFn: getMyGamificationProfile,
+    enabled: canAccessGamification,
     staleTime: 60 * 1000,
     retry: 1,
   });
 
-  if (isLoading || !data) {
+  if (!canAccessGamification || isLoading || !data) {
     return null;
   }
 
