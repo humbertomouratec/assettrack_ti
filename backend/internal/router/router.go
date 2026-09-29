@@ -120,6 +120,8 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	emailLogHandler := handler.NewEmailLogHandler(emailLogRepo)
 	aiHandler := handler.NewAIHandler(aiSvc)
 	appHandler := handler.NewAppHandler()
+	systemUpdateSvc := service.NewSystemUpdateService()
+	systemUpdateHandler := handler.NewSystemUpdateHandler(systemUpdateSvc)
 
 	// Gamification
 	gamificationRepo := repository.NewGamificationRepository(db)
@@ -545,6 +547,14 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		adminEmailLogs := v1.Group("/admin/email-logs", authMW, rActive, rAdmin)
 		{
 			adminEmailLogs.GET("", emailLogHandler.List)
+		}
+
+		adminSystem := v1.Group("/admin/system", authMW, rActive, rAdmin)
+		{
+			adminSystem.GET("/version", systemUpdateHandler.GetVersion)
+			adminSystem.POST("/updates/check", systemUpdateHandler.CheckUpdates)
+			adminSystem.POST("/updates/apply", systemUpdateHandler.ApplyUpdate)
+			adminSystem.GET("/updates/logs", systemUpdateHandler.GetUpdateStatus)
 		}
 
 		// AI Chat route

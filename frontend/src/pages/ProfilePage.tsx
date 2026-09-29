@@ -481,16 +481,40 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  // Total Unread Count for Tab Badge
+  // Synchronized unread notification count
+  const [pendingNotifCount, setPendingNotifCount] = useState<number | null>(null);
+
+  // Total Unread Count for Tab Badge and Hero Summary
   const totalUnreadCount = useMemo(() => {
-    const sdUnread = sdNotifications.filter((n) => !n.lida).length;
-    const pmUnread = pmNotifications.filter((n) => !n.lida).length;
-    const kbUnread = kbNotifications.filter((n) => !n.lida).length;
-    const rhUnread = (rhPortal?.comunicados || []).filter((c) => !c.lida).length;
-    const openSdTasks = sdTickets.filter((t) => t.status === 'aberto').length;
-    const openMaint = maintRequests.filter((m) => m.status === 'pendente').length;
-    return sdUnread + pmUnread + kbUnread + rhUnread + openSdTasks + openMaint;
-  }, [sdNotifications, pmNotifications, kbNotifications, rhPortal, sdTickets, maintRequests]);
+    if (pendingNotifCount !== null) {
+      return pendingNotifCount;
+    }
+    // Initial fallback calculation
+    const closedTicketIds = new Set(
+      sdTickets.filter((t) => t.status === 'fechado' || t.status === 'resolvido' || t.status === 'cancelado').map((t) => t.id)
+    );
+    const activeSdNotifs = sdNotifications.filter(
+      (n) => !n.lida && (!n.ticket_id || !closedTicketIds.has(n.ticket_id))
+    );
+    const activePmNotifs = pmNotifications.filter((n) => !n.lida);
+    const activeKbNotifs = kbNotifications.filter((n) => !n.lida);
+    const activeRhNotifs = (rhPortal?.comunicados || []).filter((c) => !c.lida);
+    const openSdTickets = sdTickets.filter((t) => t.status === 'aberto');
+    const openMaint = maintRequests.filter((m) => m.status === 'pendente');
+
+    const uniqueSdItems = new Set([
+      ...openSdTickets.map((t) => `ticket_${t.id}`),
+      ...activeSdNotifs.map((n) => (n.ticket_id ? `ticket_${n.ticket_id}` : `notif_${n.id}`)),
+    ]);
+
+    return (
+      uniqueSdItems.size +
+      activePmNotifs.length +
+      activeKbNotifs.length +
+      activeRhNotifs.length +
+      openMaint.length
+    );
+  }, [pendingNotifCount, sdNotifications, pmNotifications, kbNotifications, rhPortal, sdTickets, maintRequests]);
 
   if (!user) return null;
 
@@ -548,7 +572,7 @@ export const ProfilePage: React.FC = () => {
           onClick={() => handleTabChange('notificacoes')}
           className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeTab === 'notificacoes'
-              ? 'bg-brand-primary text-brand-dark shadow-sm'
+              ? 'bg-brand-primary text-white shadow-sm'
               : 'text-brand-muted hover:text-brand-text hover:bg-brand-dark/20'
           }`}
         >
@@ -558,7 +582,7 @@ export const ProfilePage: React.FC = () => {
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'notificacoes'
-                  ? 'bg-brand-dark text-brand-primary'
+                  ? 'bg-white text-brand-primary'
                   : 'bg-amber-500 text-white animate-pulse'
               }`}
             >
@@ -572,7 +596,7 @@ export const ProfilePage: React.FC = () => {
           onClick={() => handleTabChange('dados')}
           className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeTab === 'dados'
-              ? 'bg-brand-primary text-brand-dark shadow-sm'
+              ? 'bg-brand-primary text-white shadow-sm'
               : 'text-brand-muted hover:text-brand-text hover:bg-brand-dark/20'
           }`}
         >
@@ -585,7 +609,7 @@ export const ProfilePage: React.FC = () => {
           onClick={() => handleTabChange('rh')}
           className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeTab === 'rh'
-              ? 'bg-brand-primary text-brand-dark shadow-sm'
+              ? 'bg-brand-primary text-white shadow-sm'
               : 'text-brand-muted hover:text-brand-text hover:bg-brand-dark/20'
           }`}
         >
@@ -684,6 +708,7 @@ export const ProfilePage: React.FC = () => {
           {/* ABA 1: Central de Notificações & Tarefas */}
           {activeTab === 'notificacoes' && (
             <TechnicianNotificationCenter
+              userId={user.id}
               sdNotifications={sdNotifications}
               sdTickets={sdTickets}
               onMarkSdRead={handleMarkSdRead}
@@ -699,6 +724,7 @@ export const ProfilePage: React.FC = () => {
               rhComunicados={rhPortal?.comunicados || []}
               onMarkRhRead={handleMarkComunicadoRead}
               onOpenRhModal={(item) => setSelectedComunicado(item)}
+              onPendingCountChange={setPendingNotifCount}
               loading={loadingOperations}
               onRefresh={loadOperations}
             />
@@ -764,7 +790,7 @@ export const ProfilePage: React.FC = () => {
                     <button
                       type="submit"
                       disabled={savingProfile}
-                      className="bg-brand-primary text-brand-dark font-bold font-mono px-5 py-2.5 uppercase tracking-wider text-xs rounded-xl flex items-center hover:bg-brand-primary/90 disabled:opacity-50 transition cursor-pointer shadow-sm"
+                      className="bg-brand-primary text-white font-bold font-mono px-5 py-2.5 uppercase tracking-wider text-xs rounded-xl flex items-center hover:bg-brand-primary/90 disabled:opacity-50 transition cursor-pointer shadow-sm active:scale-95"
                     >
                       <Save size={16} className="mr-2" />
                       {savingProfile ? 'Salvando...' : 'Salvar Alterações'}
@@ -831,7 +857,7 @@ export const ProfilePage: React.FC = () => {
                     <button
                       type="submit"
                       disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
-                      className="bg-brand-primary text-brand-dark font-bold font-mono px-5 py-2.5 uppercase tracking-wider text-xs rounded-xl flex items-center hover:bg-brand-primary/90 disabled:opacity-50 transition cursor-pointer shadow-sm"
+                      className="bg-brand-primary text-white font-bold font-mono px-5 py-2.5 uppercase tracking-wider text-xs rounded-xl flex items-center hover:bg-brand-primary/90 disabled:opacity-50 transition cursor-pointer shadow-sm active:scale-95"
                     >
                       <Key size={16} className="mr-2" />
                       {savingPassword ? 'Alterando...' : 'Alterar Senha'}
@@ -943,7 +969,7 @@ export const ProfilePage: React.FC = () => {
                     className="w-full min-h-24 bg-brand-dark border border-brand-border px-3 py-2.5 text-sm text-brand-text rounded-lg"
                   />
                   <div className="flex justify-end">
-                    <button className="bg-brand-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-brand-dark rounded-xl transition hover:bg-brand-primary/90 cursor-pointer">
+                    <button className="bg-brand-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white font-mono rounded-xl transition hover:bg-brand-primary/90 cursor-pointer shadow-sm active:scale-95">
                       Enviar Mensagem
                     </button>
                   </div>

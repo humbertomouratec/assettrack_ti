@@ -1,9 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { getSettings, updateSettings, sendTestEmail } from '../api/settings';
 import type { SystemSettings, UpdateSettingsPayload } from '../types/settings';
-import { Save, AlertCircle, Mail } from 'lucide-react';
+import {
+  Save,
+  AlertCircle,
+  Mail,
+  GitBranch,
+  RefreshCw,
+  CheckCircle2,
+  Download,
+  Clock,
+  ShieldCheck,
+  GitCommit,
+  AlertTriangle,
+} from 'lucide-react';
+import { useAuthStore } from '../stores/authStore';
+import { getSystemVersion, checkForUpdates } from '../api/systemUpdate';
+import type { SystemVersionInfo, UpdateCheckResult } from '../types/systemUpdate';
+import { SystemUpdateModal } from '../components/SystemUpdateModal';
 
 export const SettingsPage: React.FC = () => {
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === 'admin';
+
   const [settings, setSettings] = useState<SystemSettings>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -12,9 +31,41 @@ export const SettingsPage: React.FC = () => {
   const [testEmail, setTestEmail] = useState('');
   const [testingSmtp, setTestingSmtp] = useState(false);
 
+  // Estados de Atualização do Sistema (Git & Docker)
+  const [versionInfo, setVersionInfo] = useState<SystemVersionInfo | null>(null);
+  const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+
   useEffect(() => {
     fetchSettings();
-  }, []);
+    if (isAdmin) {
+      loadSystemVersion();
+    }
+  }, [isAdmin]);
+
+  const loadSystemVersion = async () => {
+    try {
+      const info = await getSystemVersion();
+      setVersionInfo(info);
+    } catch {
+      // Silencioso se backend não responder
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdates(true);
+    setUpdateError(null);
+    try {
+      const res = await checkForUpdates();
+      setCheckResult(res);
+    } catch (err: any) {
+      setUpdateError(err?.response?.data?.error || 'Não foi possível verificar atualizações no momento.');
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -425,6 +476,170 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Atualização do Sistema (Git & Docker) - Exclusivo para Administradores */}
+        {isAdmin && (
+          <div className="bg-brand-card p-6 border border-brand-border rounded-xl shadow-sm space-y-5 md:col-span-2">
+            {/* Header com ícone, título e badge */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-200/80 gap-3">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200/80 text-brand-primary flex items-center justify-center shrink-0 shadow-xs">
+                  <GitBranch className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-brand-text uppercase font-mono tracking-wide">
+                    Atualização do Sistema (Git & Docker)
+                  </h2>
+                  <p className="text-xs text-brand-muted mt-0.5">
+                    Verifique novas versões no repositório remoto e aplique atualizações com rebuild automatizado dos containers.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center shrink-0 self-start sm:self-auto">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-brand-primary font-mono shadow-2xs whitespace-nowrap">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Acesso Restrito: Administrador
+                </span>
+              </div>
+            </div>
+
+            {/* Metadados da versão atual (Cards em grid) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="p-3.5 rounded-lg bg-slate-50/90 border border-slate-200/80 flex flex-col justify-between hover:border-brand-primary/40 transition-colors">
+                <span className="text-[11px] font-mono font-bold uppercase text-brand-muted tracking-wider block mb-1">
+                  Branch Ativa
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <GitBranch className="w-4 h-4 text-brand-primary shrink-0" />
+                  <span className="px-2 py-0.5 rounded bg-blue-100/80 text-blue-900 font-mono font-bold text-xs">
+                    {versionInfo?.branch || 'Carregando...'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50/90 border border-slate-200/80 flex flex-col justify-between hover:border-brand-primary/40 transition-colors">
+                <span className="text-[11px] font-mono font-bold uppercase text-brand-muted tracking-wider block mb-1">
+                  Commit Atual
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <GitCommit className="w-4 h-4 text-brand-primary shrink-0" />
+                  <span className="font-mono font-bold text-brand-text text-xs">
+                    {versionInfo?.commit_hash ? `#${versionInfo.commit_hash}` : 'Carregando...'}
+                  </span>
+                </div>
+                {versionInfo?.commit_message && (
+                  <p className="text-[11px] text-brand-muted truncate mt-1.5" title={versionInfo.commit_message}>
+                    {versionInfo.commit_message}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50/90 border border-slate-200/80 flex flex-col justify-between hover:border-brand-primary/40 transition-colors">
+                <span className="text-[11px] font-mono font-bold uppercase text-brand-muted tracking-wider block mb-1">
+                  Data da Versão
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <Clock className="w-4 h-4 text-brand-primary shrink-0" />
+                  <span className="font-mono font-semibold text-brand-text text-xs">
+                    {versionInfo?.commit_date ? versionInfo.commit_date.split(' ')[0] || versionInfo.commit_date : 'Carregando...'}
+                  </span>
+                </div>
+                {versionInfo?.commit_author && (
+                  <p className="text-[11px] text-brand-muted mt-1.5 truncate">
+                    Por {versionInfo.commit_author}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Status da checagem de atualizações */}
+            {checkResult && (
+              <div>
+                {checkResult.has_updates ? (
+                  <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                        <span className="font-bold text-sm">
+                          {checkResult.behind_count} nova(s) atualização(ões) encontrada(s) no GitHub!
+                        </span>
+                      </div>
+                      <span className="text-xs text-amber-700 font-mono">
+                        Checado às {new Date(checkResult.checked_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+
+                    <div className="rounded-md border border-amber-200 bg-white/90 p-2.5 max-h-40 overflow-y-auto divide-y divide-amber-100 text-xs">
+                      {checkResult.commits.map((c) => (
+                        <div key={c.hash} className="py-2 flex items-start gap-2.5">
+                          <span className="font-mono font-bold text-blue-700 shrink-0">{c.hash}</span>
+                          <span className="text-slate-800 font-medium flex-1 truncate">{c.message}</span>
+                          <span className="text-slate-500 shrink-0 text-[11px]">{c.author}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <span>O sistema está totalmente atualizado na versão mais recente da branch <strong className="font-mono text-emerald-800">{checkResult.current_branch}</strong>.</span>
+                    </div>
+                    <span className="text-[11px] text-emerald-700 font-mono">
+                      Checado às {new Date(checkResult.checked_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Aviso de erro estilizado */}
+            {updateError && (
+              <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold">Aviso de Verificação</p>
+                  <p className="mt-0.5 leading-relaxed text-red-700">{updateError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Botões de Ação */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCheckUpdates}
+                disabled={checkingUpdates}
+                className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-brand-text border border-slate-300 font-semibold px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-wider shadow-xs transition-all disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${checkingUpdates ? 'animate-spin text-brand-primary' : 'text-slate-500'}`} />
+                {checkingUpdates ? 'Consultando GitHub...' : 'Verificar Atualizações'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsUpdateModalOpen(true)}
+                className="flex items-center justify-center gap-2 bg-brand-primary hover:bg-blue-600 text-white font-bold px-5 py-2.5 rounded-lg text-xs font-mono uppercase tracking-wider shadow-md transition-all disabled:opacity-50 ml-auto"
+              >
+                <Download className="w-4 h-4" />
+                {checkResult?.has_updates ? 'Atualizar Aplicação Agora' : 'Recompilar / Atualizar Sistema'}
+              </button>
+            </div>
+
+            {/* Modal com Terminal de Logs */}
+            <SystemUpdateModal
+              isOpen={isUpdateModalOpen}
+              onClose={() => setIsUpdateModalOpen(false)}
+              currentBranch={versionInfo?.branch || 'main'}
+              behindCount={checkResult?.behind_count || 0}
+              pendingCommits={checkResult?.commits || []}
+              onUpdateCompleted={() => {
+                loadSystemVersion();
+                handleCheckUpdates();
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

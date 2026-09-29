@@ -946,18 +946,18 @@ export const DashboardPage: React.FC = () => {
 
       {/* Preventive Maintenance Unread Notifications (Assigned Orders / Updates) */}
       {pmNotifications.length > 0 && (
-        <div className="border border-amber-400/60 bg-amber-500/10 p-4 rounded-sm shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded bg-amber-500/20 text-amber-400">
-                <Wrench size={18} />
+        <div className="bg-white/95 backdrop-blur-md border border-amber-200/90 p-4 rounded-xl shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 pb-2.5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shrink-0">
+                <Wrench size={16} />
               </div>
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 font-mono flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-amber-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900 font-mono flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-amber-500" />
                   Manutenção Preventiva: Notificações ({pmNotifications.length})
                 </h3>
-                <p className="text-[11px] text-brand-muted">Você tem ordens de serviço preventivas designadas ou atualizadas.</p>
+                <p className="text-[11px] text-slate-500">Você tem ordens de serviço preventivas designadas ou atualizadas.</p>
               </div>
             </div>
             <button
@@ -966,7 +966,7 @@ export const DashboardPage: React.FC = () => {
                 await preventiveApi.markNotificationsRead();
                 setPmNotifications([]);
               }}
-              className="text-xs text-amber-400 hover:text-amber-300 underline font-mono shrink-0 text-left sm:text-right"
+              className="text-xs font-semibold text-amber-700 hover:text-amber-800 underline font-mono shrink-0 text-left sm:text-right"
             >
               Marcar todas como lidas
             </button>
@@ -975,9 +975,9 @@ export const DashboardPage: React.FC = () => {
             {pmNotifications.map((notif) => (
               <div
                 key={notif.id}
-                className="flex items-center justify-between gap-3 rounded border border-amber-500/30 bg-brand-card/90 px-3 py-2 text-xs"
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200/90 bg-slate-50/80 px-3.5 py-2 text-xs hover:bg-slate-100 transition-colors"
               >
-                <span className="text-brand-text truncate">{notif.mensagem}</span>
+                <span className="text-slate-800 font-medium truncate">{notif.mensagem}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {notif.order_id && (
                     <Link
@@ -986,7 +986,7 @@ export const DashboardPage: React.FC = () => {
                         await preventiveApi.markNotificationRead(notif.id);
                         setPmNotifications((current) => current.filter((item) => item.id !== notif.id));
                       }}
-                      className="px-2 py-1 bg-brand-primary text-brand-dark text-[11px] font-mono font-bold uppercase rounded hover:bg-brand-primary/90 transition-colors"
+                      className="px-2.5 py-1 bg-brand-primary text-white text-[11px] font-mono font-bold uppercase rounded-md hover:bg-blue-600 transition-colors shadow-2xs"
                     >
                       Abrir OS
                     </Link>
@@ -997,10 +997,10 @@ export const DashboardPage: React.FC = () => {
                       await preventiveApi.markNotificationRead(notif.id);
                       setPmNotifications((current) => current.filter((item) => item.id !== notif.id));
                     }}
-                    className="p-1 text-brand-muted hover:text-brand-text rounded"
+                    className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-200/60"
                     title="Marcar como lida"
                   >
-                    <Check size={15} />
+                    <Check size={14} />
                   </button>
                 </div>
               </div>
@@ -1011,73 +1011,111 @@ export const DashboardPage: React.FC = () => {
 
       {/* Alert Banner for Pending Asset Requests (Staff/Managers) */}
       {isStaff && stats.pending_asset_requests > 0 && (
-        <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 flex items-center justify-between shadow-lg">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-amber-500/20 text-amber-400 rounded">
-              <AlertTriangle size={24} />
+        <div className="bg-white/95 backdrop-blur-md border-l-[6px] border-l-amber-500 border-t border-r border-b border-slate-200/90 shadow-md hover:shadow-lg rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-xs">
+                <Package className="w-6 h-6" />
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-600 border-2 border-white"></span>
+              </span>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider font-mono">
-                Atenção: {stats.pending_asset_requests} {stats.pending_asset_requests === 1 ? 'Solicitação de Ativo Pendente' : 'Solicitações de Ativos Pendentes'}
-              </h3>
-              <p className="text-xs text-brand-muted mt-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[11px] font-bold font-mono uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                  Pendente
+                </span>
+                <h3 className="text-base font-bold text-slate-900 font-mono tracking-tight">
+                  {stats.pending_asset_requests} {stats.pending_asset_requests === 1 ? 'Solicitação de Ativo Pendente' : 'Solicitações de Ativos Pendentes'}
+                </h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
                 Existem solicitações de empréstimo de equipamentos aguardando aprovação ou confirmação de entrega.
               </p>
             </div>
           </div>
           <Link
             to="/emprestimos"
-            className="px-4 py-2 bg-amber-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-amber-400 transition-all shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-bold text-xs uppercase font-mono tracking-wider shadow-sm hover:shadow-md transition-all shrink-0 hover:translate-y-[-1px] group"
           >
-            Analisar Solicitações
+            <span>Analisar Solicitações</span>
+            <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
       )}
 
       {/* Alert Banner for Pending Maintenance Requests (Staff/Managers) */}
       {isStaff && stats.pending_maintenance_requests > 0 && (
-        <div className="bg-red-500/10 border-l-4 border-red-500 p-4 flex items-center justify-between shadow-lg">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-red-500/20 text-red-400 rounded">
-              <AlertTriangle size={24} />
+        <div className="bg-white/95 backdrop-blur-md border-l-[6px] border-l-red-500 border-t border-r border-b border-slate-200/90 shadow-md hover:shadow-lg rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-red-50 border border-red-200/80 text-red-600 flex items-center justify-center shadow-xs">
+                <Wrench className="w-6 h-6" />
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600 border-2 border-white"></span>
+              </span>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-red-300 uppercase tracking-wider font-mono">
-                Atenção: {stats.pending_maintenance_requests} {stats.pending_maintenance_requests === 1 ? 'Solicitação de Manutenção Pendente' : 'Solicitações de Manutenção Pendentes'}
-              </h3>
-              <p className="text-xs text-brand-muted mt-0.5">
-                Existem solicitações de manutenção aguardando atendimento ou resposta técnica.
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-red-100 text-red-800 text-[11px] font-bold font-mono uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
+                  Urgente
+                </span>
+                <h3 className="text-base font-bold text-slate-900 font-mono tracking-tight">
+                  {stats.pending_maintenance_requests} {stats.pending_maintenance_requests === 1 ? 'Solicitação de Manutenção Pendente' : 'Solicitações de Manutenção Pendentes'}
+                </h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                Existem solicitações de manutenção aguardando atendimento técnico imediato ou triagem da equipe de TI.
               </p>
             </div>
           </div>
           <Link
             to="/manutencoes"
-            className="px-4 py-2 bg-red-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-red-400 transition-all shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xs uppercase font-mono tracking-wider shadow-sm hover:shadow-md transition-all shrink-0 hover:translate-y-[-1px] group"
           >
-            Analisar Manutenções
+            <span>Analisar Manutenções</span>
+            <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
       )}
 
       {/* Alert Banner for Preventative Maintenance Issues (Staff/Managers) */}
       {isStaff && ['admin', 'gerente_ti', 'gerente_infra'].includes(userRole) && (overduePMOrdersCount > 0 || unassignedPMOrdersCount > 0) && (
-        <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-amber-500/20 text-amber-400 rounded">
-              <Wrench size={24} />
+        <div className="bg-white/95 backdrop-blur-md border-l-[6px] border-l-amber-500 border-t border-r border-b border-slate-200/90 shadow-md hover:shadow-lg rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shadow-xs">
+                <Wrench className="w-6 h-6" />
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-600 border-2 border-white"></span>
+              </span>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider font-mono">
-                Atenção Gestão: Manutenção Preventiva
-              </h3>
-              <p className="text-xs text-brand-muted mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[11px] font-bold font-mono uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                  Gestão
+                </span>
+                <h3 className="text-base font-bold text-slate-900 font-mono tracking-wide">
+                  Atenção Gestão: Manutenção Preventiva
+                </h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 flex flex-wrap gap-x-3 gap-y-1">
                 {overduePMOrdersCount > 0 && (
-                  <span className="text-red-400 font-bold">
+                  <span className="text-red-600 font-bold">
                     • {overduePMOrdersCount} {overduePMOrdersCount === 1 ? 'OS Preventiva Atrasada' : 'OS Preventivas Atrasadas'}
                   </span>
                 )}
                 {unassignedPMOrdersCount > 0 && (
-                  <span className="text-amber-300 font-bold">
+                  <span className="text-amber-700 font-bold">
                     • {unassignedPMOrdersCount} {unassignedPMOrdersCount === 1 ? 'OS Sem Técnico Designado' : 'OS Sem Técnico Designado'}
                   </span>
                 )}
@@ -1086,9 +1124,10 @@ export const DashboardPage: React.FC = () => {
           </div>
           <Link
             to="/manutencao-preventiva?tab=ordens"
-            className="px-4 py-2 bg-amber-500 text-brand-dark font-bold text-xs uppercase tracking-wider font-mono hover:bg-amber-400 transition-all shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-bold text-xs uppercase font-mono tracking-wider shadow-sm hover:shadow-md transition-all shrink-0 hover:translate-y-[-1px] group"
           >
-            Gerenciar Preventivas
+            <span>Gerenciar Preventivas</span>
+            <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
       )}

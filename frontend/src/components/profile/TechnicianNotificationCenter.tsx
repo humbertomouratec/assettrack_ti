@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bell,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   History,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import type { ServiceTicket, ServiceDeskNotification } from '../../types/serviceDesk';
 import type { SolicitacaoManutencao } from '../../types/maintenance';
@@ -54,6 +55,7 @@ export interface UnifiedWorkItem {
 }
 
 interface TechnicianNotificationCenterProps {
+  userId?: number;
   // Service Desk
   sdNotifications: ServiceDeskNotification[];
   sdTickets: ServiceTicket[];
@@ -79,12 +81,16 @@ interface TechnicianNotificationCenterProps {
   onMarkRhRead: (id: number) => Promise<void>;
   onOpenRhModal: (item: { comunicado: RHComunicado; lida: boolean }) => void;
 
+  // Sync count to parent
+  onPendingCountChange?: (count: number) => void;
+
   // General controls
   loading?: boolean;
   onRefresh?: () => void;
 }
 
 export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenterProps> = ({
+  userId,
   sdNotifications,
   sdTickets,
   onMarkSdRead,
@@ -100,6 +106,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
   rhComunicados,
   onMarkRhRead,
   onOpenRhModal,
+  onPendingCountChange,
   loading = false,
   onRefresh,
 }) => {
@@ -107,7 +114,30 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
   const [viewMode, setViewMode] = useState<'pending' | 'history'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [isMarkingAll, setIsMarkingAll] = useState(false);
-  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
+
+  // Persistent storage for attended / dismissed items so they do not accumulate or reappear after reload
+  const storageKey = useMemo(() => `assettrack_dismissed_notifications_${userId || 'default'}`, [userId]);
+  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar notificações dispensadas:', e);
+    }
+    return new Set();
+  });
+
+  // Sync to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(dismissedItemIds)));
+    } catch (e) {
+      console.warn('Erro ao salvar notificações dispensadas:', e);
+    }
+  }, [dismissedItemIds, storageKey]);
 
   // Helper date calculation for PM
   const calculatePMDateInfo = (dataAgendada?: string) => {
@@ -143,18 +173,23 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
   const allItems: UnifiedWorkItem[] = useMemo(() => {
     const items: UnifiedWorkItem[] = [];
 
+    // Fast status map for tickets (from loaded tickets and preloads)
+    const ticketStatusMap = new Map<number, string>();
+    sdTickets.forEach((t) => ticketStatusMap.set(t.id, t.status));
+    sdNotifications.forEach((n) => {
+      if (n.ticket_id && n.ticket?.status) {
+        ticketStatusMap.set(n.ticket_id, n.ticket.status);
+      }
+    });
+
     // Map service desk notifications by ticket_id
     const sdNotifsByTicket = new Map<number, ServiceDeskNotification[]>();
     const orphanSdNotifs: ServiceDeskNotification[] = [];
 
     sdNotifications.forEach((n) => {
-      // If notification has a ticket attached and that ticket is already resolved/closed/cancelled, it is ALREADY ATTENDED!
-      if (
-        n.ticket &&
-        (n.ticket.status === 'resolvido' ||
-          n.ticket.status === 'fechado' ||
-          n.ticket.status === 'cancelado')
-      ) {
+      // If notification belongs to a ticket that is already resolved/closed/cancelled, it is ALREADY ATTENDED!
+      const status = n.ticket?.status || (n.ticket_id ? ticketStatusMap.get(n.ticket_id) : undefined);
+      if (status === 'resolvido' || status === 'fechado' || status === 'cancelado') {
         return;
       }
       if (n.ticket_id) {
@@ -179,11 +214,11 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
       const hasUnread = relatedNotifs.some((n) => !n.lida) || t.status === 'aberto';
       const latestNotif = relatedNotifs[0];
 
-      const markTicketRead = relatedNotifs.length > 0
-        ? async () => {
-            await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkSdRead(n.id)));
-          }
-        : undefined;
+      const markTicketRead = async () => {
+        if (relatedNotifs.length > 0) {
+          await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkSdRead(n.id)));
+        }
+      };
 
       items.push({
         id: `sd_ticket_${t.id}`,
@@ -209,6 +244,9 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     sdNotifsByTicket.forEach((notifs, ticketId) => {
       if (processedTickets.has(ticketId)) return;
       processedTickets.add(ticketId);
+
+      const status = ticketStatusMap.get(ticketId);
+      if (status === 'fechado' || status === 'resolvido' || status === 'cancelado') return;
 
       const latestNotif = notifs[0];
       const hasUnread = notifs.some((n) => !n.lida);
@@ -253,8 +291,15 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
 
     // 2. Maintenance / Bancada Requests
     maintRequests.forEach((m) => {
-      // JÁ ATENDIDO / CONCLUÍDO: Não deve aparecer se estiver concluída, rejeitada ou devolvida
-      if (m.status === 'concluida' || m.status === 'rejeitada' || m.status === 'entregue') return;
+      // JÁ ATENDIDO / CONCLUÍDO / CANCELADO: Não deve aparecer se estiver concluída, rejeitada, entregue ou cancelada
+      if (
+        m.status === 'concluida' ||
+        m.status === 'rejeitada' ||
+        m.status === 'entregue' ||
+        (m.status as string) === 'cancelada'
+      ) {
+        return;
+      }
       const statusLabels: Record<string, string> = {
         pendente: 'Pendente de Triagem',
         aceita: 'Aceita em Bancada',
@@ -281,10 +326,22 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     });
 
     // 3. Preventive Maintenance (Deduplicated & Filtered for completed orders)
+    const pmOrderStatusMap = new Map<number, string>();
+    pmOrders.forEach((o) => pmOrderStatusMap.set(o.id, o.status));
+    pmNotifications.forEach((n) => {
+      if (n.order_id && (n as any).order?.status) {
+        pmOrderStatusMap.set(n.order_id, (n as any).order.status);
+      }
+    });
+
     const pmNotifsByOrder = new Map<number, PMNotification[]>();
     const orphanPmNotifs: PMNotification[] = [];
 
     pmNotifications.forEach((n) => {
+      const status = (n as any).order?.status || (n.order_id ? pmOrderStatusMap.get(n.order_id) : undefined);
+      if (status === 'Concluída' || status === 'Cancelada') {
+        return;
+      }
       if (n.order_id) {
         const list = pmNotifsByOrder.get(n.order_id) || [];
         list.push(n);
@@ -306,11 +363,11 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
       const hasUnread = relatedNotifs.some((n) => !n.lida);
       const dateInfo = calculatePMDateInfo(o.data_agendada);
 
-      const markOrderRead = relatedNotifs.length > 0
-        ? async () => {
-            await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkPmRead(n.id)));
-          }
-        : undefined;
+      const markOrderRead = async () => {
+        if (relatedNotifs.length > 0) {
+          await Promise.all(relatedNotifs.filter((n) => !n.lida).map((n) => onMarkPmRead(n.id)));
+        }
+      };
 
       items.push({
         id: `pm_order_${o.id}`,
@@ -324,7 +381,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         status: o.status,
         priority: (o.prioridade?.toLowerCase() as any) || 'media',
         createdAt: o.data_abertura || o.data_agendada || new Date().toISOString(),
-        isUnread: hasUnread || dateInfo?.isOverdue || dateInfo?.isToday || o.status === 'Aberta',
+        isUnread: Boolean(hasUnread || (o.status === 'Aberta' && (dateInfo?.isOverdue || dateInfo?.isToday))),
         isAttended: o.status === 'Em andamento' && !hasUnread,
         linkUrl: `/manutencao-preventiva?openDetail=1&orderId=${o.id}`,
         actionLabel: 'Executar Preventiva',
@@ -337,6 +394,9 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     pmNotifsByOrder.forEach((notifs, orderId) => {
       if (processedOrders.has(orderId)) return;
       processedOrders.add(orderId);
+
+      const status = pmOrderStatusMap.get(orderId);
+      if (status === 'Concluída' || status === 'Cancelada') return;
 
       const latest = notifs[0];
       const hasUnread = notifs.some((n) => !n.lida);
@@ -482,6 +542,11 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     return allItems.filter((i) => i.isUnread && !dismissedItemIds.has(i.id));
   }, [allItems, dismissedItemIds]);
 
+  // Notify parent of accurate pending count for tab badges
+  useEffect(() => {
+    onPendingCountChange?.(activePendingItems.length);
+  }, [activePendingItems.length, onPendingCountChange]);
+
   const counts = useMemo(() => {
     return {
       all: allItems.length,
@@ -568,6 +633,18 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     }
   }, [allItems, onMarkAllSdRead, onMarkAllPmRead, onMarkAllKbRead, onMarkRhRead, rhComunicados]);
 
+  // Clear dismissed history
+  const handleClearHistory = useCallback(() => {
+    if (window.confirm('Deseja limpar as notificações do histórico recente?')) {
+      setDismissedItemIds(new Set());
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (e) {
+        console.warn('Erro ao limpar histórico:', e);
+      }
+    }
+  }, [storageKey]);
+
   // Colors & styles by source
   const sourceMeta: Record<
     NotificationSource,
@@ -583,50 +660,62 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
     service_desk: {
       label: 'Suporte',
       icon: MessageSquare,
-      colorClass: 'text-blue-500',
-      badgeClass: 'bg-blue-500/10 border-blue-500/30 text-blue-600',
-      borderAccent: 'border-l-blue-500',
-      bgHighlight: 'bg-blue-500/5',
+      colorClass: 'text-blue-600 dark:text-blue-400',
+      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200/80 dark:bg-blue-950/70 dark:text-blue-300 dark:border-blue-800',
+      borderAccent: 'border-l-blue-500 dark:border-l-blue-400',
+      bgHighlight: 'bg-blue-50/50 dark:bg-blue-950/20',
     },
     maintenance: {
       label: 'Bancada',
       icon: Wrench,
-      colorClass: 'text-orange-500',
-      badgeClass: 'bg-orange-500/10 border-orange-500/30 text-orange-600',
-      borderAccent: 'border-l-orange-500',
-      bgHighlight: 'bg-orange-500/5',
+      colorClass: 'text-orange-600 dark:text-orange-400',
+      badgeClass: 'bg-orange-50 text-orange-700 border-orange-200/80 dark:bg-orange-950/70 dark:text-orange-300 dark:border-orange-800',
+      borderAccent: 'border-l-orange-500 dark:border-l-orange-400',
+      bgHighlight: 'bg-orange-50/50 dark:bg-orange-950/20',
     },
     preventive: {
       label: 'Preventiva',
       icon: ClipboardList,
-      colorClass: 'text-amber-500',
-      badgeClass: 'bg-amber-500/10 border-amber-500/30 text-amber-600',
-      borderAccent: 'border-l-amber-500',
-      bgHighlight: 'bg-amber-500/5',
+      colorClass: 'text-amber-600 dark:text-amber-400',
+      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200/80 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800',
+      borderAccent: 'border-l-amber-500 dark:border-l-amber-400',
+      bgHighlight: 'bg-amber-50/50 dark:bg-amber-950/20',
     },
     kanban: {
       label: 'Kanban TI',
       icon: Columns3,
-      colorClass: 'text-cyan-600',
-      badgeClass: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600',
-      borderAccent: 'border-l-cyan-500',
-      bgHighlight: 'bg-cyan-500/5',
+      colorClass: 'text-cyan-700 dark:text-cyan-400',
+      badgeClass: 'bg-cyan-50 text-cyan-800 border-cyan-200/80 dark:bg-cyan-950/70 dark:text-cyan-300 dark:border-cyan-800',
+      borderAccent: 'border-l-cyan-500 dark:border-l-cyan-400',
+      bgHighlight: 'bg-cyan-50/50 dark:bg-cyan-950/20',
     },
     rh: {
       label: 'Comunicado RH',
       icon: Megaphone,
-      colorClass: 'text-emerald-600',
-      badgeClass: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600',
-      borderAccent: 'border-l-emerald-500',
-      bgHighlight: 'bg-emerald-500/5',
+      colorClass: 'text-emerald-700 dark:text-emerald-400',
+      badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800',
+      borderAccent: 'border-l-emerald-500 dark:border-l-emerald-400',
+      bgHighlight: 'bg-emerald-50/50 dark:bg-emerald-950/20',
     },
   };
 
   const priorityMeta: Record<string, { label: string; className: string }> = {
-    urgente: { label: 'Urgente', className: 'text-red-500 bg-red-500/10 border-red-500/30' },
-    alta: { label: 'Alta', className: 'text-orange-500 bg-orange-500/10 border-orange-500/30' },
-    media: { label: 'Média', className: 'text-blue-500 bg-blue-500/10 border-blue-500/30' },
-    baixa: { label: 'Baixa', className: 'text-slate-500 bg-slate-500/10 border-slate-500/30' },
+    urgente: {
+      label: 'Urgente',
+      className: 'text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/70 dark:border-red-800',
+    },
+    alta: {
+      label: 'Alta',
+      className: 'text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/70 dark:border-orange-800',
+    },
+    media: {
+      label: 'Média',
+      className: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-950/70 dark:border-blue-800',
+    },
+    baixa: {
+      label: 'Baixa',
+      className: 'text-slate-700 bg-slate-100 border-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700',
+    },
   };
 
   const formatRelativeTime = (isoString: string) => {
@@ -833,99 +922,156 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
         </div>
       </div>
 
-      {/* Barra de Filtros, Modo de Visualização e Busca */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-xl border border-brand-border bg-brand-card p-3 shadow-sm">
-        {/* Toggle Ativas/Pendentes vs Histórico de Atendidas */}
-        <div className="flex items-center rounded-xl bg-brand-dark/40 p-1 border border-brand-border">
-          <button
-            type="button"
-            onClick={() => setViewMode('pending')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'pending'
-                ? 'bg-brand-primary text-brand-dark shadow-sm'
-                : 'text-brand-muted hover:text-brand-text'
-            }`}
-          >
-            <Sparkles size={13} />
-            <span>Pendentes ({counts.allPending})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('history')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'history'
-                ? 'bg-brand-primary text-brand-dark shadow-sm'
-                : 'text-brand-muted hover:text-brand-text'
-            }`}
-          >
-            <History size={13} />
-            <span>Atendidas / Histórico</span>
-          </button>
+      {/* Painel de Controle e Filtros Organizado */}
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-sm space-y-3">
+        {/* Linha 1: Segmented Toggle (Pendentes vs Histórico) + Busca + Ação de Limpeza */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          {/* Segmented Switcher */}
+          <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/90 p-1 border border-slate-200/80 dark:border-slate-700/60 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('pending')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'pending'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <Sparkles size={13} className={viewMode === 'pending' ? 'text-amber-300' : ''} />
+              <span>Pendentes</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none font-bold ${
+                viewMode === 'pending'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {counts.allPending}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('history')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'history'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <History size={13} />
+              <span>Atendidas / Histórico</span>
+            </button>
+          </div>
+
+          {/* Lado Direito: Ação Limpar Histórico + Busca */}
+          <div className="flex items-center gap-2 flex-1 sm:justify-end">
+            {viewMode === 'history' && filteredItems.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-xs font-mono font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition cursor-pointer shadow-xs shrink-0"
+                title="Limpar histórico recente de notificações"
+              >
+                <Trash2 size={13} />
+                <span className="hidden sm:inline">Limpar histórico</span>
+              </button>
+            )}
+
+            {/* Input busca */}
+            <div className="relative w-full sm:w-56">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar notificações..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 pl-8 pr-7 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none transition shadow-xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  title="Limpar busca"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Pílulas de Módulo */}
-        <div className="flex flex-wrap items-center gap-1">
+        {/* Linha 2: Filtro por Módulo em Pílulas Horizontais com Badges de Contagem */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <span className="text-[11px] font-mono uppercase text-slate-400 mr-1 shrink-0 font-semibold">
+            Módulo:
+          </span>
+
           <button
             type="button"
             onClick={() => setSelectedSource('all')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer shrink-0 ${
               selectedSource === 'all'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-brand-dark/30 text-brand-muted hover:text-brand-text border border-brand-border'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white border border-slate-200 dark:border-slate-700'
             }`}
           >
-            Todos
+            <span>Todos</span>
+            {counts.allPending > 0 && viewMode === 'pending' && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-none ${
+                selectedSource === 'all'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300'
+              }`}>
+                {counts.allPending}
+              </span>
+            )}
           </button>
 
           {(
             [
-              ['service_desk', 'Suporte', MessageSquare],
-              ['maintenance', 'Bancada', Wrench],
-              ['preventive', 'Preventiva', ClipboardList],
-              ['kanban', 'Kanban', Columns3],
-              ['rh', 'RH', Megaphone],
+              ['service_desk', 'Suporte', MessageSquare, counts.service_desk],
+              ['maintenance', 'Bancada', Wrench, counts.maintenance],
+              ['preventive', 'Preventivas', ClipboardList, counts.preventive],
+              ['kanban', 'Kanban TI', Columns3, counts.kanban],
+              ['rh', 'RH Avisos', Megaphone, counts.rh],
             ] as const
-          ).map(([key, label, Icon]) => (
+          ).map(([key, label, Icon, count]) => (
             <button
               key={key}
               type="button"
               onClick={() => setSelectedSource(key)}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition cursor-pointer shrink-0 ${
                 selectedSource === key
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-brand-dark/30 text-brand-muted hover:text-brand-text border border-brand-border'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white border border-slate-200 dark:border-slate-700'
               }`}
             >
               <Icon size={12} />
               <span>{label}</span>
+              {count > 0 && viewMode === 'pending' && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-none ${
+                  selectedSource === key
+                    ? 'bg-white/25 text-white'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
+                }`}>
+                  {count}
+                </span>
+              )}
             </button>
           ))}
-        </div>
-
-        {/* Input busca */}
-        <div className="relative sm:w-44">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted" />
-          <input
-            type="text"
-            placeholder="Buscar..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-brand-border bg-brand-dark/30 pl-8 pr-3 py-1.5 text-xs text-brand-text focus:border-brand-primary focus:outline-none"
-          />
         </div>
       </div>
 
       {/* Lista de Cards das Notificações & Tarefas */}
       <div className="space-y-3">
         {filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-brand-border bg-brand-card p-12 text-center shadow-sm">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-dark/40 text-brand-muted border border-brand-border">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-12 text-center shadow-sm">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
               {viewMode === 'pending' ? <Check size={28} className="text-emerald-500" /> : <Inbox size={28} />}
             </div>
-            <h3 className="text-base font-bold text-brand-text">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
               {viewMode === 'pending' ? 'Tudo em dia!' : 'Nenhum histórico encontrado'}
             </h3>
-            <p className="mt-1 text-xs text-brand-muted max-w-md mx-auto">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               {viewMode === 'pending'
                 ? 'Todas as suas notificações e ordens foram atendidas ou arquivadas. Bom trabalho!'
                 : 'Nenhuma notificação atendida arquivada no histórico recente.'}
@@ -934,7 +1080,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
               <button
                 type="button"
                 onClick={() => setViewMode('history')}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-dark px-3 py-1.5 text-xs font-mono font-bold text-brand-primary hover:bg-brand-primary/10 transition cursor-pointer"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-1.5 text-xs font-mono font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition cursor-pointer shadow-xs"
               >
                 <History size={13} />
                 <span>Ver histórico de atendidas</span>
@@ -950,21 +1096,24 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
             return (
               <article
                 key={item.id}
-                className={`relative overflow-hidden rounded-xl border transition-all duration-200 hover:shadow-md hover:border-brand-primary/40 ${
+                className={`group relative overflow-hidden rounded-2xl border transition-all duration-200 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 ${
                   meta.borderAccent
                 } border-l-[5px] ${
                   item.isUnread && !dismissedItemIds.has(item.id)
-                    ? 'border-brand-border bg-white dark:bg-slate-900 shadow-sm'
-                    : 'border-brand-border/70 bg-brand-card/70 opacity-85'
+                    ? 'border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm'
+                    : 'border-slate-200/70 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/60 opacity-80'
                 }`}
               >
                 {/* Indicador pulsante de não lido */}
                 {item.isUnread && !dismissedItemIds.has(item.id) && (
                   <span
                     aria-label="Pendente"
-                    className="absolute right-3.5 top-3.5 h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm animate-pulse"
+                    className="absolute right-3.5 top-3.5 flex h-2.5 w-2.5"
                     title="Item pendente de atendimento"
-                  />
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
+                  </span>
                 )}
 
                 <div className="p-4 sm:p-5">
@@ -981,14 +1130,14 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
 
                       {/* Código de Identificação */}
                       {item.code && (
-                        <span className="font-mono text-xs font-bold text-brand-primary">
+                        <span className="font-mono text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/50 px-2 py-0.5 rounded border border-blue-200/80 dark:border-blue-800/60">
                           {item.code}
                         </span>
                       )}
 
                       {/* Status */}
                       {item.status && (
-                        <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 rounded border border-brand-border bg-brand-dark/30 text-brand-text">
+                        <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           {item.status}
                         </span>
                       )}
@@ -1004,13 +1153,13 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
 
                       {/* Tag de atraso ou hoje */}
                       {item.dateInfo?.isOverdue && (
-                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-500 flex items-center gap-1">
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800 flex items-center gap-1">
                           <AlertTriangle size={11} />
                           {item.dateInfo.label}
                         </span>
                       )}
                       {item.dateInfo?.isToday && (
-                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-600 flex items-center gap-1">
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 flex items-center gap-1">
                           <Clock size={11} />
                           {item.dateInfo.label}
                         </span>
@@ -1018,37 +1167,37 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                     </div>
 
                     {/* Timestamp relativo */}
-                    <div className="flex items-center gap-1 text-[11px] font-mono text-brand-muted">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-slate-400">
                       <Clock size={12} />
                       <span>{formatRelativeTime(item.createdAt)}</span>
                     </div>
                   </div>
 
                   {/* Título & Conteúdo */}
-                  <div className="mt-2.5">
-                    <h3 className="text-sm font-bold text-brand-text tracking-tight m-0">
+                  <div className="mt-3">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug m-0">
                       {item.title}
                     </h3>
                     {item.subtitle && (
-                      <p className="mt-0.5 text-xs text-brand-muted font-medium font-mono">
+                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400 font-medium font-mono">
                         {item.subtitle}
                       </p>
                     )}
-                    <p className="mt-1.5 text-xs text-brand-muted leading-relaxed line-clamp-2 m-0">
+                    <p className="mt-1.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2 m-0">
                       {item.description}
                     </p>
                   </div>
 
                   {/* Rodapé com Ações Diretas */}
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-brand-border/60 pt-3">
-                    <div className="text-[11px] font-mono text-brand-muted">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                       {item.itemType === 'task' ? (
-                        <span className="inline-flex items-center gap-1 text-blue-600 font-semibold">
-                          <Layers size={12} /> Tarefa operacional
+                        <span className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-semibold">
+                          <Layers size={13} /> Tarefa operacional
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <Bell size={12} /> Notificação
+                        <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-medium">
+                          <Bell size={13} /> Notificação
                         </span>
                       )}
                     </div>
@@ -1059,10 +1208,10 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                         <button
                           type="button"
                           onClick={() => handleMarkItemRead(item)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-brand-border bg-brand-dark/40 px-2.5 py-1 text-xs font-mono font-semibold text-brand-muted hover:text-brand-text hover:bg-brand-primary/10 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/90 px-3 py-1.5 text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 dark:hover:border-emerald-700 transition cursor-pointer shadow-xs"
                           title="Marcar como atendida/lida e remover da notificação"
                         >
-                          <Check size={13} className="text-emerald-500" />
+                          <Check size={13} className="text-emerald-600 dark:text-emerald-400" />
                           <span>Atendido / Lido</span>
                         </button>
                       )}
@@ -1078,7 +1227,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                             setDismissedItemIds((prev) => new Set(prev).add(item.id));
                             item.onOpenDetail?.();
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-brand-dark shadow-sm hover:bg-brand-primary/90 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 dark:bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-500 px-3.5 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-white shadow-sm transition cursor-pointer active:scale-95"
                         >
                           <span>{item.actionLabel}</span>
                           <ArrowRight size={13} />
@@ -1092,7 +1241,7 @@ export const TechnicianNotificationCenter: React.FC<TechnicianNotificationCenter
                             }
                             setDismissedItemIds((prev) => new Set(prev).add(item.id));
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-brand-dark shadow-sm hover:bg-brand-primary/90 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 dark:bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-500 px-3.5 py-1.5 text-xs font-mono font-bold uppercase tracking-wider text-white shadow-sm transition cursor-pointer active:scale-95"
                         >
                           <span>{item.actionLabel}</span>
                           <ArrowRight size={13} />

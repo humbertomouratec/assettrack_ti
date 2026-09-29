@@ -41,7 +41,7 @@ O Nginx do container web encaminha essa rota internamente para a API Go. O acess
 | Backup | `/backups` | Geração, download, exclusão, restore e status. |
 | Perfil | `/profile` | Dados pessoais, avatar, senha e portal RH pessoal. |
 | Dashboard | `/dashboard` | Indicadores consolidados. |
-| Administração | `/admin/settings`, `/admin/email-logs` | Configurações globais, permissões e logs de e-mail. |
+| Administração | `/admin/settings`, `/admin/email-logs`, `/admin/system` | Configurações globais, permissões, logs de e-mail e atualização via Git. |
 | IA | `/chat` | Assistente conversacional conectado aos dados da aplicação. |
 
 ## 🔐 Autenticação (`/auth`)
@@ -323,6 +323,26 @@ Retorna as informações sobre a versão oficial compilada do APK Android.
 
 ### GET `/app/download`
 Transmite o arquivo binário `.apk` mais recente via HTTP com cabeçalhos para download direto no navegador ou smartphone. O nome do arquivo é derivado do manifest gerado ao anexar o APK manualmente com `scripts/publish_mobile_apk.sh /caminho/AssetTrack-TI.apk`.
+
+---
+
+## 🚀 Atualização do Sistema (`/admin/system`)
+
+Endpoints protegidos exclusivamente para usuários com papel `admin` (`rActive` + `rAdmin`).
+
+### GET `/admin/system/version`
+Retorna informações da versão local instalada (commit hash, branch, data e mensagem do commit).
+
+### POST `/admin/system/updates/check`
+Executa `git fetch` e calcula a quantidade e a lista de commits pendentes no repositório remoto upstream.
+
+### POST `/admin/system/updates/apply`
+Dispara de forma assíncrona o processo de atualização (`git pull` e reconstrução dos containers Docker). Retorna `202 Accepted` com identificador do job.
+
+### GET `/admin/system/updates/logs`
+Retorna o status atual (`idle`, `checking`, `updating`, `completed`, `error`) e o buffer circular de linhas de log do terminal em tempo real.
+
+Para detalhes completos de payload e arquitetura, consulte [`docs/ATUALIZACAO_SISTEMA_GIT.md`](./ATUALIZACAO_SISTEMA_GIT.md).
 
 ---
 

@@ -232,6 +232,18 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 
 ---
 
+## 🚀 Atualização do Sistema (Git & Docker)
+
+- **Painel de Atualização (Admin Only):** Exclusivo para usuários com papel `admin` na tela de Configurações (`/configuracoes`).
+- **Inspeção de Versão:** Consulta imediata da branch ativa, commit hash e data do último commit local.
+- **Checagem Remota (`git fetch`):** Verificação de novidades no repositório upstream com listagem detalhada de novos commits (autor, data e mensagem).
+- **Deploy com Rebuild Integrado:** Disparo assíncrono de `git pull` e recompilação/recriação dos containers da aplicação (`update_docker.sh`).
+- **Terminal de Logs em Tempo Real:** Modal interativo que exibe a saída do terminal linha a linha durante o processo.
+- **Reconexão Automática:** Monitoramento do endpoint `/health` pós-restart com sugestão de recarga automática da página.
+- Documentação detalhada em [`docs/ATUALIZACAO_SISTEMA_GIT.md`](./ATUALIZACAO_SISTEMA_GIT.md).
+
+---
+
 ## 🎨 Design System: Industrial Technical
 
 - Interface limpa e objetiva com navegação estruturada em módulos e sub-menus organizados (Dropdowns), maximizando o espaço útil da tela e garantindo a padronização.
