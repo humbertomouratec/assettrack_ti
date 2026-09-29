@@ -52,6 +52,7 @@ export const MaintenancePage: React.FC = () => {
   const [concludingRequestId, setConcludingRequestId] = useState<number | null>(null);
   const [conclusionNotes, setConclusionNotes] = useState('');
   const [conclusionCost, setConclusionCost] = useState<string>('');
+  const [cancelPendingPurchases, setCancelPendingPurchases] = useState(true);
 
   // QR Handover modal integration
   const [showQRModal, setShowQRModal] = useState(false);
@@ -67,6 +68,12 @@ export const MaintenancePage: React.FC = () => {
   const [partItemType, setPartItemType] = useState('Consumo');
   const [partSubmitting, setPartSubmitting] = useState(false);
   const [purchaseSuccessMessage, setPurchaseSuccessMessage] = useState<string | null>(null);
+
+  // Purchase request cancellation modal
+  const [cancelPurchaseModalOpen, setCancelPurchaseModalOpen] = useState(false);
+  const [selectedPurchaseToCancel, setSelectedPurchaseToCancel] = useState<{ id: number; numero: string; item: string } | null>(null);
+  const [cancelPurchaseReason, setCancelPurchaseReason] = useState('');
+  const [cancelPurchaseLoading, setCancelPurchaseLoading] = useState(false);
 
   const handleOpenPurchaseModal = (req: SolicitacaoManutencao) => {
     setPurchaseTargetRequest(req);
@@ -103,14 +110,38 @@ export const MaintenancePage: React.FC = () => {
       });
 
       setPurchaseSuccessMessage('Solicitação de compra encaminhada com sucesso para o Comprador!');
+      fetchRequests();
       setTimeout(() => {
         setPurchaseModalOpen(false);
         setPurchaseSuccessMessage(null);
-      }, 2000);
+      }, 1500);
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.detail || 'Erro ao gerar solicitação de compra.');
     } finally {
       setPartSubmitting(false);
+    }
+  };
+
+  const handleOpenCancelPurchaseModal = (purchaseId: number, numero: string, itemDesc: string) => {
+    setSelectedPurchaseToCancel({ id: purchaseId, numero, item: itemDesc });
+    setCancelPurchaseReason('');
+    setCancelPurchaseModalOpen(true);
+  };
+
+  const handleConfirmCancelPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPurchaseToCancel) return;
+    try {
+      setCancelPurchaseLoading(true);
+      await procurementApi.cancelRequest(selectedPurchaseToCancel.id, cancelPurchaseReason.trim() || undefined);
+      setCancelPurchaseModalOpen(false);
+      setSelectedPurchaseToCancel(null);
+      setCancelPurchaseReason('');
+      fetchRequests();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Erro ao cancelar solicitação de compra.');
+    } finally {
+      setCancelPurchaseLoading(false);
     }
   };
 
@@ -213,10 +244,11 @@ export const MaintenancePage: React.FC = () => {
 
     try {
       const cost = conclusionCost ? Number(conclusionCost) : undefined;
-      await maintenanceApi.concludeRequest(concludingRequestId, conclusionNotes, cost);
+      await maintenanceApi.concludeRequest(concludingRequestId, conclusionNotes, cost, cancelPendingPurchases);
       setConcludingRequestId(null);
       setConclusionNotes('');
       setConclusionCost('');
+      setCancelPendingPurchases(true);
       fetchRequests();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Erro ao registrar conclusão.');
@@ -457,6 +489,103 @@ export const MaintenancePage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Linked Purchase Requests (Peças Solicitadas) */}
+                {request.solicitacoes_compra && request.solicitacoes_compra.length > 0 && (
+                  <div className="mt-3 space-y-2.5 rounded-xl border border-blue-500/25 bg-blue-500/5 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-blue-400">
+                        <ShoppingCart size={15} />
+                        <span>Peças / Pedidos de Compra ({request.solicitacoes_compra.length})</span>
+                      </div>
+                      {request.status === 'aceita' && isTechnicianOrAbove && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPurchaseModal(request)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                        >
+                          <Plus size={12} />
+                          <span>Pedir outra peça</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {request.solicitacoes_compra.map((sc) => {
+                        const isCancelled = sc.status === 'Cancelada' || sc.status === 'Reprovada';
+                        const isApproved = sc.status === 'Aprovada' || sc.status === 'Convertida em cotação';
+                        const isPending = sc.status === 'Pendente' || sc.status === 'Em aprovação' || sc.status === 'Rascunho' || sc.status === 'Aguardando Liberação de Orçamento';
+
+                        const itemNames = sc.itens && sc.itens.length > 0
+                          ? sc.itens.map(it => `${it.quantidade > 1 ? `${it.quantidade}x ` : ''}${it.product?.nome || 'Peça/Item'}`).join(', ')
+                          : sc.justificativa;
+
+                        const totalEstimado = sc.valor_estimado_total || (sc.itens?.reduce((sum, i) => sum + (i.valor_estimado || 0), 0) || 0);
+
+                        return (
+                          <div
+                            key={sc.id}
+                            className={`rounded-lg border p-2.5 text-xs transition-all ${
+                              isCancelled
+                                ? 'border-brand-border/40 bg-brand-dark/30 opacity-75'
+                                : isApproved
+                                  ? 'border-emerald-500/30 bg-emerald-500/5'
+                                  : 'border-blue-500/20 bg-brand-dark/60'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-bold text-brand-text text-[11px]">{sc.numero}</span>
+                                  <span
+                                    className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${
+                                      isCancelled
+                                        ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                                        : isApproved
+                                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                                          : isPending
+                                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                                            : 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                                    }`}
+                                  >
+                                    {sc.status}
+                                  </span>
+                                  {totalEstimado > 0 && (
+                                    <span className="text-[11px] font-mono text-brand-muted">
+                                      Est.: {formatCurrency(totalEstimado)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-brand-text font-medium" title={itemNames}>
+                                  {itemNames}
+                                </div>
+                                <div className="text-[10px] text-brand-muted font-mono">
+                                  Criado em {new Date(sc.data_criacao).toLocaleDateString('pt-BR')}
+                                  {sc.solicitante?.nome ? ` por ${sc.solicitante.nome}` : ''}
+                                </div>
+                              </div>
+
+                              {/* Cancellation Button */}
+                              {!isCancelled && isTechnicianOrAbove && (
+                                <div className="shrink-0 pt-1 sm:pt-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCancelPurchaseModal(sc.id, sc.numero, itemNames)}
+                                    className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                    title="Cancelar esta solicitação de compra de peça"
+                                  >
+                                    <X size={12} />
+                                    <span>Cancelar Pedido</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* If the request status is concluded/delivered, or has associated maintenance information */}
                 {(request.status === 'concluida' || request.status === 'entregue' || request.manutencao) && (
                   <div className="mt-3 p-3 bg-brand-dark/30 border border-emerald-500/10 rounded space-y-2">
@@ -690,56 +819,149 @@ export const MaintenancePage: React.FC = () => {
       )}
 
       {/* Conclude Modal */}
-      {concludingRequestId && (
+      {concludingRequestId && (() => {
+        const concludingReq = requests.find((r) => r.id === concludingRequestId);
+        const pendingPurchases = concludingReq?.solicitacoes_compra?.filter(
+          (sc) =>
+            sc.status === 'Pendente' ||
+            sc.status === 'Em aprovação' ||
+            sc.status === 'Rascunho' ||
+            sc.status === 'Aguardando Liberação de Orçamento'
+        );
+        const hasPendingPurchases = !!(pendingPurchases && pendingPurchases.length > 0);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-dark/80 backdrop-blur-md">
+            <div className="w-full max-w-md bg-brand-card border border-brand-border shadow-2xl overflow-hidden rounded-xl">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-border">
+                <h3 className="font-semibold text-brand-text text-sm">Registrar Conclusão de Reparo</h3>
+                <button onClick={() => setConcludingRequestId(null)} className="text-brand-muted hover:text-brand-text">
+                  <X size={18} />
+                </button>
+              </div>
+              <form onSubmit={handleConcludeRequest} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-brand-muted">Notas Técnicas do Reparo</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Detalhe o que foi feito (ex: troca de pasta térmica, limpeza, instalação de componente)..."
+                    value={conclusionNotes}
+                    onChange={(e) => setConclusionNotes(e.target.value)}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-xs focus:outline-none focus:border-brand-primary text-brand-text rounded"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-brand-muted flex items-center space-x-1">
+                    <DollarSign size={12} />
+                    <span>Custo Adicional de Reparo (Opcional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    step="0.01"
+                    value={conclusionCost}
+                    onChange={(e) => setConclusionCost(e.target.value)}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-1.5 text-xs focus:outline-none focus:border-brand-primary text-brand-text rounded"
+                  />
+                </div>
+
+                {hasPendingPurchases && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                      <AlertCircle size={14} />
+                      <span>Solicitações de compra pendentes ({pendingPurchases.length})</span>
+                    </div>
+                    <p className="text-brand-muted text-[11px] leading-relaxed">
+                      Existem pedidos de compra de peça ainda não finalizados vinculados a esta manutenção.
+                    </p>
+                    <label className="flex items-center gap-2 cursor-pointer pt-1 text-brand-text font-medium text-[11px]">
+                      <input
+                        type="checkbox"
+                        checked={cancelPendingPurchases}
+                        onChange={(e) => setCancelPendingPurchases(e.target.checked)}
+                        className="rounded border-brand-border text-brand-primary focus:ring-brand-primary"
+                      />
+                      <span>Cancelar automaticamente os pedidos de peça pendentes</span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setConcludingRequestId(null)}
+                    className="w-1/3 py-2 bg-brand-dark border border-brand-border text-xs text-brand-muted hover:text-brand-text rounded"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-brand-primary hover:bg-brand-primary/95 text-brand-dark text-xs font-semibold rounded shadow-sm"
+                  >
+                    Confirmar Conclusão
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Cancel Purchase Request Modal */}
+      {cancelPurchaseModalOpen && selectedPurchaseToCancel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-dark/80 backdrop-blur-md">
-          <div className="w-full max-w-md bg-brand-card border border-brand-border shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-brand-border">
-              <h3 className="font-semibold text-brand-text text-sm">Registrar Conclusão de Reparo</h3>
-              <button onClick={() => setConcludingRequestId(null)} className="text-brand-muted hover:text-brand-text">
+          <div className="w-full max-w-md bg-brand-card border border-brand-border shadow-2xl overflow-hidden rounded-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-brand-border bg-brand-dark/40">
+              <div className="flex items-center space-x-2 text-red-400">
+                <AlertCircle size={18} />
+                <h3 className="font-semibold text-brand-text text-sm">Cancelar Pedido de Peça</h3>
+              </div>
+              <button
+                onClick={() => setCancelPurchaseModalOpen(false)}
+                className="text-brand-muted hover:text-brand-text"
+              >
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleConcludeRequest} className="p-6 space-y-4">
+            <form onSubmit={handleConfirmCancelPurchase} className="p-6 space-y-4">
+              <div className="bg-brand-dark/50 p-3 border border-brand-border/40 text-xs font-mono rounded space-y-1">
+                <div className="text-brand-muted text-[10px] uppercase">Solicitação de Compra:</div>
+                <div className="text-brand-text font-bold text-sm">
+                  {selectedPurchaseToCancel.numero}
+                </div>
+                <div className="text-brand-muted text-[11px] truncate">
+                  Item: {selectedPurchaseToCancel.item}
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <label className="text-xs text-brand-muted">Notas Técnicas do Reparo</label>
+                <label className="text-xs text-brand-muted">Motivo do Cancelamento (Opcional)</label>
                 <textarea
-                  required
-                  rows={3}
-                  placeholder="Detalhe o que foi feito (ex: troca de pasta térmica, limpeza, formatação)..."
-                  value={conclusionNotes}
-                  onChange={(e) => setConclusionNotes(e.target.value)}
-                  className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-xs focus:outline-none focus:border-brand-primary text-brand-text"
+                  rows={2}
+                  placeholder="Ex: Peça já disponível em estoque, reparo realizado sem substituição..."
+                  value={cancelPurchaseReason}
+                  onChange={(e) => setCancelPurchaseReason(e.target.value)}
+                  className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-xs focus:outline-none focus:border-brand-primary text-brand-text rounded"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs text-brand-muted flex items-center space-x-1">
-                  <DollarSign size={12} />
-                  <span>Custo Adicional de Reparo (Opcional)</span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  step="0.01"
-                  value={conclusionCost}
-                  onChange={(e) => setConclusionCost(e.target.value)}
-                  className="w-full bg-brand-dark border border-brand-border px-3 py-1.5 text-xs focus:outline-none focus:border-brand-primary text-brand-text"
-                />
-              </div>
-
-              <div className="flex space-x-3">
+              <div className="flex space-x-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setConcludingRequestId(null)}
-                  className="w-1/3 py-1.5 bg-brand-dark border border-brand-border text-xs text-brand-muted"
+                  onClick={() => setCancelPurchaseModalOpen(false)}
+                  className="w-1/3 py-2 bg-brand-dark border border-brand-border text-xs text-brand-muted hover:text-brand-text rounded"
                 >
-                  Cancelar
+                  Voltar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-1.5 bg-brand-primary text-brand-dark text-xs font-semibold"
+                  disabled={cancelPurchaseLoading}
+                  className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded flex items-center justify-center space-x-2 shadow-sm"
                 >
-                  Confirmar Conclusão
+                  {cancelPurchaseLoading && <RefreshCw size={14} className="animate-spin" />}
+                  <span>Confirmar Cancelamento</span>
                 </button>
               </div>
             </form>

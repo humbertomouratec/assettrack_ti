@@ -404,6 +404,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			compras.POST("/solicitar-peca", procurementHandler.CreateMaintenancePurchaseRequest)
 			compras.GET("/solicitacoes/:id", procurementHandler.GetRequest)
 			compras.POST("/solicitacoes/:id/decidir", procurementHandler.DecideRequest)
+			compras.POST("/solicitacoes/:id/cancelar", procurementHandler.CancelRequest)
 			compras.POST("/solicitacoes/:id/liberar-orcamento", procurementHandler.ReleaseBudget)
 
 			compras.GET("/cotacoes", procurementHandler.ListQuotations)

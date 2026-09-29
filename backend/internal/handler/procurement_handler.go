@@ -1449,6 +1449,62 @@ func (h *ProcurementHandler) DecideRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, req)
 }
 
+func (h *ProcurementHandler) CancelRequest(c *gin.Context) {
+	user := middleware.GetCurrentUser(c)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+	req, err := h.requestRepo.GetByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Solicitação não encontrada"})
+		return
+	}
+
+	// Verify authorization: solicitante, staff/admin/gerente/tecnico, or comprador
+	if req.SolicitanteID != user.ID && !isStaff(user.Role) && user.Role != models.RoleComprador {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão para cancelar esta solicitação"})
+		return
+	}
+
+	if req.Status == models.PRStatusCancelada {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Solicitação já está cancelada"})
+		return
+	}
+
+	var in struct {
+		Motivo string `json:"motivo"`
+	}
+	_ = c.ShouldBindJSON(&in)
+
+	motivo := strings.TrimSpace(in.Motivo)
+	if motivo == "" {
+		motivo = "Cancelado pelo solicitante/técnico responsável"
+	}
+
+	req.Status = models.PRStatusCancelada
+	if err := h.requestRepo.Update(req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logHistory("purchase_requests", req.ID, user.ID, fmt.Sprintf("Cancelou a solicitação de compra. Motivo: %s", motivo))
+	h.broadcastKanbanRequestUpdate(req, nil, fmt.Sprintf("Solicitação de compra %s foi cancelada (%s).", req.Numero, motivo))
+
+	// Notify requester or buyers
+	msg := fmt.Sprintf("A solicitação de compra %s foi cancelada por %s. Motivo: %s", req.Numero, user.Nome, motivo)
+	linkRedir := fmt.Sprintf("/compras?tab=solicitacoes&id=%d", req.ID)
+	_ = h.notifRepo.Create(&models.PurchaseNotification{
+		UserID:               req.SolicitanteID,
+		Mensagem:             msg,
+		LinkRedirecionamento: &linkRedir,
+		DataCriacao:          time.Now(),
+	})
+
+	c.JSON(http.StatusOK, req)
+}
+
 func (h *ProcurementHandler) ReleaseBudget(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)

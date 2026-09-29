@@ -250,12 +250,17 @@ func (h *MaintenanceHandler) ConcludeRequest(c *gin.Context) {
 	}
 
 	var payload struct {
-		ObservacaoConclusao string   `json:"observacao_conclusao"`
-		Custo               *float64 `json:"custo"`
+		ObservacaoConclusao    string   `json:"observacao_conclusao"`
+		Custo                  *float64 `json:"custo"`
+		CancelPendingPurchases bool     `json:"cancel_pending_purchases"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": err.Error()})
 		return
+	}
+
+	if payload.CancelPendingPurchases {
+		_ = h.repo.CancelPendingPurchaseRequestsForTicket(req.ID, user.ID)
 	}
 
 	if req.ManutencaoID == nil {

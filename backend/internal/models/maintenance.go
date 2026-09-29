@@ -68,6 +68,7 @@ type SolicitacaoManutencao struct {
 	Responsavel *User       `gorm:"foreignKey:ResponsavelID" json:"responsavel,omitempty"`
 	Asset       *Asset      `gorm:"foreignKey:AssetID" json:"asset,omitempty"`
 	Manutencao  *Manutencao `gorm:"foreignKey:ManutencaoID" json:"manutencao,omitempty"`
+	SolicitacoesCompra []PurchaseRequest `gorm:"foreignKey:OrigemTicketID" json:"solicitacoes_compra,omitempty"`
 }
 
 func (SolicitacaoManutencao) TableName() string { return "solicitacoes_manutencao" }

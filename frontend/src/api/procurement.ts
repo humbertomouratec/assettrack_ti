@@ -133,6 +133,10 @@ export const procurementApi = {
     const response = await apiClient.post<PurchaseRequest>(`/compras/solicitacoes/${id}/liberar-orcamento`, {});
     return response.data;
   },
+  cancelRequest: async (id: number, motivo?: string): Promise<PurchaseRequest> => {
+    const response = await apiClient.post<PurchaseRequest>(`/compras/solicitacoes/${id}/cancelar`, { motivo });
+    return response.data;
+  },
 
   // Quotations
   listQuotations: async (): Promise<PurchaseQuotation[]> => {

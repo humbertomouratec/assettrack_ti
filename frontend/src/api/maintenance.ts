@@ -39,10 +39,11 @@ export const maintenanceApi = {
     });
     return response.data;
   },
-  concludeRequest: async (id: number, notes: string, cost?: number): Promise<SolicitacaoManutencao> => {
+  concludeRequest: async (id: number, notes: string, cost?: number, cancel_pending_purchases?: boolean): Promise<SolicitacaoManutencao> => {
     const response = await apiClient.post<SolicitacaoManutencao>(`/solicitacoes-manutencao/${id}/concluir`, {
       observacao_conclusao: notes,
       custo: cost,
+      cancel_pending_purchases,
     });
     return response.data;
   },

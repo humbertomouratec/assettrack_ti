@@ -26,7 +26,12 @@ func (r *MaintenanceRepository) ListRequests(userID *uint, skip, limit int) ([]m
 		Preload("Asset.CurrentArmazenamento").
 		Preload("Asset.PrevLocal").
 		Preload("Asset.PrevArmazenamento").
-		Preload("Manutencao")
+		Preload("Manutencao").
+		Preload("SolicitacoesCompra", func(db *gorm.DB) *gorm.DB {
+			return db.Order("data_criacao desc")
+		}).
+		Preload("SolicitacoesCompra.Itens.Product").
+		Preload("SolicitacoesCompra.Solicitante")
 
 	if userID != nil {
 		query = query.Where("solicitante_id = ?", *userID)
@@ -49,6 +54,11 @@ func (r *MaintenanceRepository) GetRequestByID(id uint) (*models.SolicitacaoManu
 		Preload("Asset.PrevLocal").
 		Preload("Asset.PrevArmazenamento").
 		Preload("Manutencao").
+		Preload("SolicitacoesCompra", func(db *gorm.DB) *gorm.DB {
+			return db.Order("data_criacao desc")
+		}).
+		Preload("SolicitacoesCompra.Itens.Product").
+		Preload("SolicitacoesCompra.Solicitante").
 		First(&req, id).Error
 	if err != nil {
 		return nil, err
@@ -63,6 +73,30 @@ func (r *MaintenanceRepository) CreateRequest(req *models.SolicitacaoManutencao)
 
 func (r *MaintenanceRepository) UpdateRequest(req *models.SolicitacaoManutencao) error {
 	return r.db.Save(req).Error
+}
+
+func (r *MaintenanceRepository) CancelPendingPurchaseRequestsForTicket(ticketID uint, userID uint) error {
+	var prs []models.PurchaseRequest
+	err := r.db.Where("origem_ticket_id = ? AND status IN (?, ?, ?, ?)",
+		ticketID, models.PRStatusPendente, models.PRStatusEmAprovacao, models.PRStatusRascunho, models.PRStatusAguardandoOrcamento).
+		Find(&prs).Error
+	if err != nil {
+		return err
+	}
+	for _, pr := range prs {
+		pr.Status = models.PRStatusCancelada
+		_ = r.db.Save(&pr)
+		obs := "Cancelamento automático após conclusão da manutenção"
+		_ = r.db.Create(&models.PurchaseHistory{
+			TabelaOrigem: "purchase_requests",
+			RegistroID:   pr.ID,
+			UserID:       userID,
+			Acao:         "Cancelamento automático após conclusão da manutenção",
+			Observacoes:  &obs,
+			DataAcao:     time.Now(),
+		})
+	}
+	return nil
 }
 
 // Manutencao methods

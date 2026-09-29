@@ -1,4 +1,5 @@
 import type { Asset } from './asset';
+import type { PurchaseRequest } from './procurement';
 
 export interface SolicitacaoManutencao {
   id: number;
@@ -21,6 +22,7 @@ export interface SolicitacaoManutencao {
   };
   manutencao_id?: number;
   manutencao?: Manutencao;
+  solicitacoes_compra?: PurchaseRequest[];
   data_resposta?: string;
   observacao_resposta?: string;
   data_conclusao_tecnico?: string;
