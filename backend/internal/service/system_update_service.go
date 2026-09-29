@@ -330,6 +330,7 @@ func (s *systemUpdateService) executeAsyncUpdate(jobID string) {
 
 		cmd := exec.Command("/bin/bash", scriptPath)
 		cmd.Dir = s.repoDir
+		cmd.Env = append(os.Environ(), "COMPOSE_PROJECT_NAME=assettrack_ti")
 
 		stdoutPipe, errOut := cmd.StdoutPipe()
 		stderrPipe, errErr := cmd.StderrPipe()

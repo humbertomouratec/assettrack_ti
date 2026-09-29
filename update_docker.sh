@@ -22,6 +22,12 @@ fi
 source "./scripts/resolve_compose.sh"
 resolve_compose "$(pwd)"
 
+# Definir o nome fixo do projeto compose para garantir integridade caso executado dentro do container (/workspace/repo)
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-assettrack_ti}"
+
+# Configurar safe.directory para evitar erros de permissão de UID no git
+git config --global --add safe.directory '*' 2>/dev/null || true
+
 # Gerar identificador único para a release atual e compartilhar com o build web
 export VITE_APP_VERSION_CODE="$(date -u +%s)"
 export VITE_APP_VERSION_NAME="$(date -u +%Y.%m.%d.%H%M)"
