@@ -193,3 +193,4 @@ backend/uploads/*.apk
 backend/uploads/mobile-release.json
 backend/uploads/android-signing/
 backend/uploads/
+.system_update_state*

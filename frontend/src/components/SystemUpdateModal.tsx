@@ -60,7 +60,7 @@ export const SystemUpdateModal: React.FC<SystemUpdateModalProps> = ({
     }
   }, [logs]);
 
-  const startPolling = () => {
+  const startPolling = (targetJobId?: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
 
     pollingRef.current = setInterval(async () => {
@@ -70,9 +70,14 @@ export const SystemUpdateModal: React.FC<SystemUpdateModalProps> = ({
           setLogs(res.logs);
         }
 
+        // Se informamos targetJobId, aguarda o job corrente
+        if (targetJobId && res.job_id && res.job_id !== targetJobId && res.status !== 'updating') {
+          return;
+        }
+
         if (res.status === 'completed') {
           if (pollingRef.current) clearInterval(pollingRef.current);
-          setStatusMessage('Recipientes recompilados. Verificando conectividade da API...');
+          setStatusMessage('Containers recriados com sucesso! Verificando conectividade da API...');
           setIsReconnecting(true);
           startHealthChecking();
         } else if (res.status === 'error') {
@@ -92,7 +97,7 @@ export const SystemUpdateModal: React.FC<SystemUpdateModalProps> = ({
 
   const startHealthChecking = () => {
     let attempts = 0;
-    const maxAttempts = 40;
+    const maxAttempts = 60;
 
     healthCheckRef.current = setInterval(async () => {
       attempts += 1;
@@ -117,8 +122,8 @@ export const SystemUpdateModal: React.FC<SystemUpdateModalProps> = ({
       setLogs(['[00:00:00] Disparando ordem de atualização...']);
       setStatusMessage('Iniciando o processo no servidor...');
 
-      await applySystemUpdate();
-      startPolling();
+      const job = await applySystemUpdate();
+      startPolling(job.job_id);
     } catch (err: any) {
       setPhase('error');
       setErrorMessage(err?.response?.data?.error || 'Não foi possível disparar a atualização.');

@@ -3,9 +3,9 @@ package service
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -255,11 +255,112 @@ func (s *systemUpdateService) CheckUpdates(ctx context.Context) (*UpdateCheckRes
 	}, nil
 }
 
+type UpdateStatePersisted struct {
+	JobID     string `json:"job_id"`
+	Status    string `json:"status"` // "idle", "updating", "completed", "error"
+	IsRunning bool   `json:"is_running"`
+	Error     string `json:"error"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func (s *systemUpdateService) isInsideDocker() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if os.Getenv("DOCKER_CONTAINER") != "" {
+		return true
+	}
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		return true
+	}
+	return false
+}
+
+func (s *systemUpdateService) getHostRepoDir() string {
+	if h := os.Getenv("ASSETTRACK_HOST_REPO_DIR"); h != "" {
+		return h
+	}
+	hostname, err := os.Hostname()
+	if err == nil && hostname != "" {
+		cmd := exec.Command("docker", "inspect", hostname, "--format", "{{range .Mounts}}{{if eq .Destination \"/workspace/repo\"}}{{.Source}}{{end}}{{end}}")
+		if out, err := cmd.Output(); err == nil {
+			p := strings.TrimSpace(string(out))
+			if p != "" {
+				return p
+			}
+		}
+	}
+	return s.repoDir
+}
+
+func (s *systemUpdateService) isUpdaterRunning() bool {
+	cmd := exec.Command("docker", "ps", "-q", "-f", "name=assettrack_updater")
+	if out, err := cmd.Output(); err == nil {
+		if strings.TrimSpace(string(out)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *systemUpdateService) readPersistedState() (*UpdateStatePersisted, []string) {
+	statePath := filepath.Join(s.repoDir, ".system_update_state.json")
+	logPath := filepath.Join(s.repoDir, ".system_update_state.log")
+
+	var state UpdateStatePersisted
+	data, err := os.ReadFile(statePath)
+	if err == nil {
+		_ = json.Unmarshal(data, &state)
+	}
+
+	var logs []string
+	if logData, err := os.ReadFile(logPath); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(logData)))
+		for scanner.Scan() {
+			logs = append(logs, scanner.Text())
+		}
+		if len(logs) > 500 {
+			logs = logs[len(logs)-500:]
+		}
+	}
+
+	return &state, logs
+}
+
+func (s *systemUpdateService) writePersistedState(state *UpdateStatePersisted) {
+	statePath := filepath.Join(s.repoDir, ".system_update_state.json")
+	tmpPath := statePath + ".tmp"
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err == nil {
+		if err := os.WriteFile(tmpPath, data, 0644); err == nil {
+			_ = os.Rename(tmpPath, statePath)
+		}
+	}
+}
+
+func (s *systemUpdateService) appendLog(format string, a ...interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msg := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), fmt.Sprintf(format, a...))
+	s.logs = append(s.logs, msg)
+	if len(s.logs) > 500 {
+		s.logs = s.logs[len(s.logs)-500:]
+	}
+
+	logPath := filepath.Join(s.repoDir, ".system_update_state.log")
+	if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		defer f.Close()
+		_, _ = f.WriteString(msg + "\n")
+	}
+}
+
 func (s *systemUpdateService) ApplyUpdate(ctx context.Context) (*UpdateJobResponse, error) {
 	s.mu.Lock()
-	if s.isRunning {
-		s.mu.Unlock()
-		return nil, errors.New("uma atualização já está em execução")
+	defer s.mu.Unlock()
+
+	persisted, _ := s.readPersistedState()
+	if s.isRunning || (persisted != nil && persisted.IsRunning && s.isUpdaterRunning()) {
+		return nil, errors.New("uma atualização já está em andamento")
 	}
 
 	jobID := fmt.Sprintf("upd-%d", time.Now().Unix())
@@ -271,138 +372,191 @@ func (s *systemUpdateService) ApplyUpdate(ctx context.Context) (*UpdateJobRespon
 		fmt.Sprintf("[%s] Diretório do repositório: %s", time.Now().Format("15:04:05"), s.repoDir),
 	}
 	s.lastErr = ""
-	s.mu.Unlock()
 
-	go s.executeAsyncUpdate(jobID)
+	// Escreve estado inicial persistido
+	s.writePersistedState(&UpdateStatePersisted{
+		JobID:     jobID,
+		Status:    "updating",
+		IsRunning: true,
+		Error:     "",
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+
+	// Inicializa arquivo de log limpo
+	logPath := filepath.Join(s.repoDir, ".system_update_state.log")
+	initialLog := fmt.Sprintf("=== Registro de Atualização do AssetTrack TI (%s) ===\n[%s] Ordem de atualização recebida pela API.\n", jobID, time.Now().Format("15:04:05"))
+	_ = os.WriteFile(logPath, []byte(initialLog), 0644)
+
+	go s.executeDecoupledUpdate(jobID)
 
 	return &UpdateJobResponse{
 		JobID:   jobID,
 		Status:  "updating",
-		Message: "Processo de atualização iniciado com sucesso.",
+		Message: "Processo de atualização desacoplado iniciado com sucesso.",
 	}, nil
 }
 
-func (s *systemUpdateService) appendLog(format string, a ...interface{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	msg := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), fmt.Sprintf(format, a...))
-	s.logs = append(s.logs, msg)
-	if len(s.logs) > 500 {
-		s.logs = s.logs[len(s.logs)-500:]
-	}
-}
+func (s *systemUpdateService) executeDecoupledUpdate(jobID string) {
+	// Se estiver rodando dentro de um container Docker:
+	if s.isInsideDocker() {
+		hostRepoDir := s.getHostRepoDir()
+		scriptHostPath := filepath.Join(hostRepoDir, "scripts", "docker_self_update.sh")
 
-func (s *systemUpdateService) executeAsyncUpdate(jobID string) {
-	defer func() {
-		s.mu.Lock()
-		s.isRunning = false
-		s.mu.Unlock()
-	}()
+		// Remove qualquer container anterior residual
+		_ = exec.Command("docker", "rm", "-f", "assettrack_updater").Run()
 
-	s.appendLog("📥 Executando git pull...")
-	_ = exec.Command("git", "config", "--global", "--add", "safe.directory", "*").Run()
-	_ = exec.Command("git", "config", "--global", "--add", "safe.directory", s.repoDir).Run()
-	pullCmd := exec.Command("git", "pull")
-	pullCmd.Dir = s.repoDir
-	out, err := pullCmd.CombinedOutput()
-	outputStr := strings.TrimSpace(string(out))
-	if outputStr != "" {
-		for _, l := range strings.Split(outputStr, "\n") {
-			s.appendLog("git: %s", l)
+		s.appendLog("🚀 Disparando container runner desacoplado (assettrack_updater)...")
+		s.appendLog("📂 Mapeamento do host: %s", hostRepoDir)
+
+		runnerCmd := exec.Command("docker", "run", "-d", "--rm",
+			"--name", "assettrack_updater",
+			"-v", "/var/run/docker.sock:/var/run/docker.sock",
+			"-v", fmt.Sprintf("%s:%s", hostRepoDir, hostRepoDir),
+			"-w", hostRepoDir,
+			"assettrack_ti-api:latest",
+			"/bin/bash", scriptHostPath, jobID,
+		)
+
+		out, err := runnerCmd.CombinedOutput()
+		if err != nil {
+			errStr := strings.TrimSpace(string(out))
+			s.mu.Lock()
+			s.status = "error"
+			s.isRunning = false
+			s.lastErr = fmt.Sprintf("Falha ao iniciar assettrack_updater: %v (%s)", err, errStr)
+			s.mu.Unlock()
+
+			s.writePersistedState(&UpdateStatePersisted{
+				JobID:     jobID,
+				Status:    "error",
+				IsRunning: false,
+				Error:     fmt.Sprintf("Falha ao iniciar runner: %v (%s)", err, errStr),
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			})
+			s.appendLog("❌ Erro ao disparar container runner: %v (%s)", err, errStr)
+			return
 		}
-	}
 
-	if err != nil {
-		s.mu.Lock()
-		s.status = "error"
-		s.lastErr = fmt.Sprintf("Falha no git pull: %v", err)
-		s.mu.Unlock()
-		s.appendLog("❌ Erro ao atualizar repositório Git: %v", err)
+		s.appendLog("✅ Runner desacoplado iniciado no Docker (ID: %s)", strings.TrimSpace(string(out)))
+		s.appendLog("ℹ️ Os containers api e web serão recriados sem interromper o processo de atualização.")
 		return
 	}
 
-	s.appendLog("✅ Repositório atualizado com sucesso via Git!")
-
-	// 2. Verificar se existe script de atualização/rebuild
-	scriptPath := filepath.Join(s.repoDir, "update_docker.sh")
-	if _, err := os.Stat(scriptPath); err == nil {
-		s.appendLog("🚀 Script update_docker.sh localizado. Disparando recompilação dos containers...")
-
-		cmd := exec.Command("/bin/bash", scriptPath)
-		cmd.Dir = s.repoDir
-		cmd.Env = append(os.Environ(), "COMPOSE_PROJECT_NAME=assettrack_ti")
-
-		stdoutPipe, errOut := cmd.StdoutPipe()
-		stderrPipe, errErr := cmd.StderrPipe()
-
-		if errOut != nil || errErr != nil {
-			s.appendLog("⚠️ Não foi possível capturar pipes de stdout/stderr: %v %v", errOut, errErr)
-			if startErr := cmd.Start(); startErr != nil {
-				s.mu.Lock()
-				s.status = "error"
-				s.lastErr = startErr.Error()
-				s.mu.Unlock()
-				s.appendLog("❌ Falha ao iniciar script update_docker.sh: %v", startErr)
-				return
-			}
-		} else {
-			if startErr := cmd.Start(); startErr != nil {
-				s.mu.Lock()
-				s.status = "error"
-				s.lastErr = startErr.Error()
-				s.mu.Unlock()
-				s.appendLog("❌ Falha ao iniciar script update_docker.sh: %v", startErr)
-				return
-			}
-
-			// Ler saídas assincronamente
-			var wg sync.WaitGroup
-			wg.Add(2)
-
-			readPipe := func(reader io.Reader) {
-				defer wg.Done()
-				scanner := bufio.NewScanner(reader)
-				for scanner.Scan() {
-					s.appendLog("%s", scanner.Text())
-				}
-			}
-
-			go readPipe(stdoutPipe)
-			go readPipe(stderrPipe)
-
-			wg.Wait()
-		}
-
-		if waitErr := cmd.Wait(); waitErr != nil {
-			s.mu.Lock()
-			s.status = "error"
-			s.lastErr = fmt.Sprintf("update_docker.sh falhou: %v", waitErr)
-			s.mu.Unlock()
-			s.appendLog("❌ Falha durante a execução de update_docker.sh: %v", waitErr)
-			return
-		}
-	} else {
-		s.appendLog("ℹ️ update_docker.sh não encontrado em %s. Git pull aplicado.", s.repoDir)
+	// Caso o backend esteja rodando diretamente no host do sistema operacional:
+	scriptPath := filepath.Join(s.repoDir, "scripts", "docker_self_update.sh")
+	if _, err := os.Stat(scriptPath); err != nil {
+		scriptPath = filepath.Join(s.repoDir, "update_docker.sh")
 	}
 
-	s.mu.Lock()
-	s.status = "completed"
-	s.mu.Unlock()
-	s.appendLog("🎉 Atualização do sistema concluída com êxito!")
+	s.appendLog("🚀 Executando script de atualização no host: %s", scriptPath)
+	cmd := exec.Command("/bin/bash", scriptPath, jobID)
+	cmd.Dir = s.repoDir
+	cmd.Env = append(os.Environ(), "COMPOSE_PROJECT_NAME=assettrack_ti")
+
+	if err := cmd.Start(); err != nil {
+		s.mu.Lock()
+		s.status = "error"
+		s.isRunning = false
+		s.lastErr = err.Error()
+		s.mu.Unlock()
+
+		s.writePersistedState(&UpdateStatePersisted{
+			JobID:     jobID,
+			Status:    "error",
+			IsRunning: false,
+			Error:     err.Error(),
+			UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		})
+		s.appendLog("❌ Falha ao iniciar script: %v", err)
+		return
+	}
+
+	go func() {
+		err := cmd.Wait()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.isRunning = false
+		if err != nil {
+			s.status = "error"
+			s.lastErr = err.Error()
+			s.writePersistedState(&UpdateStatePersisted{
+				JobID:     jobID,
+				Status:    "error",
+				IsRunning: false,
+				Error:     err.Error(),
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			})
+		} else {
+			s.status = "completed"
+			s.writePersistedState(&UpdateStatePersisted{
+				JobID:     jobID,
+				Status:    "completed",
+				IsRunning: false,
+				Error:     "",
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			})
+		}
+	}()
 }
 
 func (s *systemUpdateService) GetUpdateStatus(ctx context.Context) (*UpdateStatusResponse, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	inMemoryRunning := s.isRunning
+	inMemoryStatus := s.status
+	inMemoryJobID := s.jobID
+	inMemoryLogs := make([]string, len(s.logs))
+	copy(inMemoryLogs, s.logs)
+	inMemoryErr := s.lastErr
+	s.mu.RUnlock()
 
-	logsCopy := make([]string, len(s.logs))
-	copy(logsCopy, s.logs)
+	persisted, diskLogs := s.readPersistedState()
+	if persisted != nil && persisted.JobID != "" {
+		finalLogs := diskLogs
+		if len(finalLogs) == 0 {
+			finalLogs = inMemoryLogs
+		}
+
+		status := persisted.Status
+		isRunning := persisted.IsRunning
+		errStr := persisted.Error
+
+		// Valida se o runner ainda está rodando caso o status seja "updating"
+		if isRunning {
+			if s.isInsideDocker() && !s.isUpdaterRunning() {
+				// Runner terminou. Verificar nos logs se concluiu ou deu erro
+				isRunning = false
+				foundSuccess := false
+				for _, line := range finalLogs {
+					if strings.Contains(line, "concluída com êxito") || strings.Contains(line, "atualizado com sucesso") {
+						foundSuccess = true
+						break
+					}
+				}
+				if foundSuccess {
+					status = "completed"
+				} else if status == "updating" {
+					status = "error"
+					if errStr == "" {
+						errStr = "O processo de atualização foi encerrado antes da confirmação de sucesso."
+					}
+				}
+			}
+		}
+
+		return &UpdateStatusResponse{
+			JobID:     persisted.JobID,
+			IsRunning: isRunning,
+			Status:    status,
+			Logs:      finalLogs,
+			Error:     errStr,
+		}, nil
+	}
 
 	return &UpdateStatusResponse{
-		JobID:     s.jobID,
-		IsRunning: s.isRunning,
-		Status:    s.status,
-		Logs:      logsCopy,
-		Error:     s.lastErr,
+		JobID:     inMemoryJobID,
+		IsRunning: inMemoryRunning,
+		Status:    inMemoryStatus,
+		Logs:      inMemoryLogs,
+		Error:     inMemoryErr,
 	}, nil
 }
