@@ -135,6 +135,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
   const [tab, setTab] = useState<'dashboard' | 'relatorio' | 'planos' | 'ordens' | 'calendario' | 'notifs'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [exportingReport, setExportingReport] = useState(false);
 
   // Dashboard
@@ -362,9 +363,24 @@ export const PreventiveMaintenancePage: React.FC = () => {
     return () => window.clearInterval(interval);
   }, []);
 
+  const showOrderError = (err: any) => {
+    const msg = typeof err === 'string'
+      ? err
+      : (err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Erro na operação da OS');
+    setOrderError(msg);
+    setTimeout(() => setOrderError((prev) => (prev === msg ? null : prev)), 6000);
+  };
+
   const showError = (err: any) => {
-    setError(err.response?.data?.error || 'Erro na operação');
-    setTimeout(() => setError(null), 5000);
+    const msg = typeof err === 'string'
+      ? err
+      : (err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Erro na operação');
+    if (orderDetail) {
+      setOrderError(msg);
+      setTimeout(() => setOrderError((prev) => (prev === msg ? null : prev)), 6000);
+    }
+    setError(msg);
+    setTimeout(() => setError((prev) => (prev === msg ? null : prev)), 5000);
   };
 
   const today = startOfDay(new Date());
@@ -800,6 +816,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
     try {
       const detail = await preventiveApi.getOrder(orderId);
       setOrderDetail(normalizeOrderDetail(detail));
+      setOrderError(null);
       setMProduto('');
       setMQuantidade('1');
       setMValorUnitario('');
@@ -879,8 +896,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
   const submitPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orderDetail || !photoFile) {
-      setError('Selecione uma foto para anexar na OS.');
-      setTimeout(() => setError(null), 5000);
+      showOrderError('Selecione uma foto para anexar na OS.');
       return;
     }
     try {
@@ -904,14 +920,12 @@ export const PreventiveMaintenancePage: React.FC = () => {
     );
 
     if (requiredChecklistItems.length > 0 && completedRequired.length !== requiredChecklistItems.length) {
-      setError('Finalize todos os itens obrigatórios do checklist antes de concluir a OS.');
-      setTimeout(() => setError(null), 5000);
+      showOrderError('Finalize todos os itens obrigatórios do checklist antes de concluir a OS.');
       return;
     }
 
     if (orderDetail.order.photos.length === 0) {
-      setError('Anexe pelo menos uma evidência fotográfica antes de concluir a OS.');
-      setTimeout(() => setError(null), 5000);
+      showOrderError('Anexe pelo menos uma evidência fotográfica antes de concluir a OS.');
       return;
     }
 
@@ -949,10 +963,20 @@ export const PreventiveMaintenancePage: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <div className="p-3 border border-red-500/30 bg-red-500/5 text-red-400 text-xs font-mono flex items-center space-x-2">
-          <ShieldAlert size={16} />
-          <span>{error}</span>
+      {error && !orderDetail && !orderModal && !planModal && (
+        <div className="p-3 border border-red-500/30 bg-red-500/5 text-red-400 text-xs font-mono flex items-center justify-between space-x-2">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-red-400/80 hover:text-red-200 transition-colors"
+            title="Fechar aviso"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
@@ -1595,6 +1619,23 @@ export const PreventiveMaintenancePage: React.FC = () => {
               </button>
             </div>
 
+            {error && (
+              <div className="p-3 rounded-lg border border-red-500/50 bg-red-500/10 text-red-300 text-xs font-mono flex items-start justify-between gap-2 shadow animate-fade-in">
+                <div className="flex items-start space-x-2">
+                  <ShieldAlert size={16} className="text-red-400 shrink-0 mt-0.5" />
+                  <span className="font-semibold leading-relaxed">{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="text-red-400/80 hover:text-red-200 transition-colors shrink-0 p-0.5"
+                  title="Fechar aviso"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <form onSubmit={submitPlan} className="space-y-4">
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-brand-muted mb-1.5">Nome do Plano *</label>
@@ -1759,6 +1800,23 @@ export const PreventiveMaintenancePage: React.FC = () => {
                 <X size={20} />
               </button>
             </div>
+
+            {error && (
+              <div className="p-3 rounded-lg border border-red-500/50 bg-red-500/10 text-red-300 text-xs font-mono flex items-start justify-between gap-2 shadow animate-fade-in">
+                <div className="flex items-start space-x-2">
+                  <ShieldAlert size={16} className="text-red-400 shrink-0 mt-0.5" />
+                  <span className="font-semibold leading-relaxed">{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="text-red-400/80 hover:text-red-200 transition-colors shrink-0 p-0.5"
+                  title="Fechar aviso"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
 
             <form onSubmit={submitOrder} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -1976,10 +2034,28 @@ export const PreventiveMaintenancePage: React.FC = () => {
               <button onClick={() => {
                 setOrderDetail(null);
                 setOrderOriginContext(null);
+                setOrderError(null);
               }} className="text-brand-muted hover:text-brand-text">
                 <X size={20} />
               </button>
             </div>
+
+            {orderError && (
+              <div className="p-3.5 rounded-lg border border-red-500/50 bg-red-500/10 text-red-300 text-xs font-mono flex items-start justify-between gap-3 shadow-md animate-fade-in">
+                <div className="flex items-start space-x-2.5">
+                  <ShieldAlert size={18} className="text-red-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed font-semibold">{orderError}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOrderError(null)}
+                  className="text-red-400/80 hover:text-red-200 transition-colors shrink-0 p-0.5"
+                  title="Fechar aviso"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
 
             {orderOriginContext && (
               <div className="border border-cyan-500/30 bg-cyan-500/10 p-4">
@@ -2133,8 +2209,7 @@ export const PreventiveMaintenancePage: React.FC = () => {
                                     if (checked && item.requer_foto) {
                                       foto = await pickChecklistPhoto();
                                       if (!foto) {
-                                        setError(`Selecione uma foto para concluir o item obrigatório "${item.descricao}".`);
-                                        setTimeout(() => setError(null), 5000);
+                                        showOrderError(`Selecione uma foto para concluir o item obrigatório "${item.descricao}".`);
                                         return;
                                       }
                                     }
@@ -2459,6 +2534,23 @@ export const PreventiveMaintenancePage: React.FC = () => {
                       </p>
                     </div>
                   </div>
+
+                  {orderError && (
+                    <div className="p-3.5 rounded-lg border border-red-500/50 bg-red-500/10 text-red-300 text-xs font-mono flex items-start justify-between gap-2 shadow-md animate-fade-in">
+                      <div className="flex items-start space-x-2">
+                        <ShieldAlert size={16} className="text-red-400 shrink-0 mt-0.5" />
+                        <span className="font-semibold leading-relaxed">{orderError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOrderError(null)}
+                        className="text-red-400/80 hover:text-red-200 transition-colors shrink-0 p-0.5"
+                        title="Fechar aviso"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex justify-end space-x-3 pt-2">
                     <button
