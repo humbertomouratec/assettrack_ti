@@ -23,13 +23,13 @@ func NewSettingsHandler(settingsRepo repository.SystemSettingsRepository, emailS
 // GetFeatures is available to every active authenticated user so module visibility
 // is controlled by one server-side value instead of per-browser local state.
 func (h *SettingsHandler) GetFeatures(c *gin.Context) {
-	keys := []string{"preventive_maintenance_enabled", "purchases_enabled", "kanban_enabled", "ai_enabled"}
+	keys := []string{"preventive_maintenance_enabled", "purchases_enabled", "kanban_enabled", "ai_enabled", "home_assistant_enabled"}
 	result := make(map[string]bool, len(keys))
 	for _, key := range keys {
 		setting, err := h.settingsRepo.GetSetting(c.Request.Context(), key)
 		if err != nil || setting == nil {
 			// Existing installations predate feature rows; preserve their active modules.
-			result[key] = key != "ai_enabled"
+			result[key] = key != "ai_enabled" && key != "home_assistant_enabled"
 			continue
 		}
 		result[key] = strings.EqualFold(strings.TrimSpace(setting.SettingValue), "true")

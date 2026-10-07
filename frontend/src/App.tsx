@@ -26,6 +26,7 @@ const SetoresPage = lazy(() => import('./pages/SetoresPage').then(m => ({ defaul
 const MonitoramentoPage = lazy(() => import('./pages/MonitoramentoPage').then(m => ({ default: m.MonitoramentoPage })));
 const ManualPage = lazy(() => import('./pages/ManualPage').then(m => ({ default: m.ManualPage })));
 const GamificationDashboardPage = lazy(() => import('./pages/GamificationDashboardPage').then(m => ({ default: m.GamificationDashboardPage })));
+const HomeAssistantPage = lazy(() => import('./pages/HomeAssistantPage').then(m => ({ default: m.HomeAssistantPage })));
 import { AppUpdateNotifier } from './components/layout/AppUpdateNotifier';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initializeAndroidNotifications } from './utils/androidNotifications';
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const canAccessSettings = ['admin', 'gerente_ti', 'gerente_infra'].includes(user?.role?.toLowerCase() || '');
   const canAccessGamification = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(user?.role?.toLowerCase() || '');
+  const canAccessHomeAssistant = ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'].includes(user?.role?.toLowerCase() || '');
 
   useEffect(() => {
     checkAuth();
@@ -230,6 +232,18 @@ const App: React.FC = () => {
           />
           <Route path="/ranking" element={<Navigate to={canAccessGamification ? "/gamificacao" : "/"} replace />} />
           <Route path="/conquistas" element={<Navigate to={canAccessGamification ? "/gamificacao" : "/"} replace />} />
+          <Route
+            path="/automacao"
+            element={
+              canAccessHomeAssistant ? (
+                <MainLayout>
+                  <HomeAssistantPage />
+                </MainLayout>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
           <Route
             path="/profile"
             element={

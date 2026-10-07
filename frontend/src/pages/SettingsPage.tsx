@@ -13,9 +13,11 @@ import {
   ShieldCheck,
   GitCommit,
   AlertTriangle,
+  Radio,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { getSystemVersion, checkForUpdates } from '../api/systemUpdate';
+import { homeAssistantApi } from '../api/homeAssistant';
 import type { SystemVersionInfo, UpdateCheckResult } from '../types/systemUpdate';
 import { SystemUpdateModal } from '../components/SystemUpdateModal';
 
@@ -30,6 +32,8 @@ export const SettingsPage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [testEmail, setTestEmail] = useState('');
   const [testingSmtp, setTestingSmtp] = useState(false);
+  const [testingHA, setTestingHA] = useState(false);
+  const [haTestResult, setHaTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Estados de Atualização do Sistema (Git & Docker)
   const [versionInfo, setVersionInfo] = useState<SystemVersionInfo | null>(null);
@@ -75,6 +79,9 @@ export const SettingsPage: React.FC = () => {
         preventive_maintenance_enabled: data.preventive_maintenance_enabled || 'true',
         purchases_enabled: data.purchases_enabled || 'true',
         kanban_enabled: data.kanban_enabled || 'true',
+        home_assistant_enabled: data.home_assistant_enabled || 'false',
+        home_assistant_url: data.home_assistant_url || '',
+        home_assistant_token: data.home_assistant_token || '',
         openai_model: data.openai_model || 'gpt-4o-mini',
         gemini_model: data.gemini_model || 'gemini-2.5-flash',
       });
@@ -139,6 +146,27 @@ export const SettingsPage: React.FC = () => {
       setError(err?.response?.data?.error || 'Não foi possível enviar o e-mail de teste.');
     } finally {
       setTestingSmtp(false);
+    }
+  };
+
+  const handleTestHA = async () => {
+    setTestingHA(true);
+    setHaTestResult(null);
+    setError(null);
+    try {
+      await updateSettings({ ...settings });
+      const res = await homeAssistantApi.testConnection();
+      setHaTestResult({
+        success: true,
+        message: `Conectado com sucesso ao Home Assistant v${res.version || 'desconhecida'} (${res.location_name || 'Servidor Local'}) - Estado: ${res.state || 'ok'}`,
+      });
+    } catch (err: any) {
+      setHaTestResult({
+        success: false,
+        message: err.response?.data?.error || 'Falha ao conectar com o Home Assistant. Verifique a URL e o Token.',
+      });
+    } finally {
+      setTestingHA(false);
     }
   };
 
@@ -268,6 +296,17 @@ export const SettingsPage: React.FC = () => {
                 className="w-5 h-5 accent-brand-primary bg-brand-dark border-brand-border"
               />
               <span className="text-brand-text group-hover:text-brand-primary transition-colors">Kanban de Projetos</span>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                name="home_assistant_enabled"
+                checked={settings.home_assistant_enabled === 'true'}
+                onChange={handleInputChange}
+                className="w-5 h-5 accent-brand-primary bg-brand-dark border-brand-border"
+              />
+              <span className="text-brand-text group-hover:text-brand-primary transition-colors">Automação & IoT (Home Assistant)</span>
             </label>
           </div>
         </div>
@@ -474,6 +513,108 @@ export const SettingsPage: React.FC = () => {
               </div>
               <p className="mt-2 text-xs text-brand-muted">O teste salva as configurações atuais e registra o resultado em Logs de E-mail.</p>
             </div>
+          </div>
+        </div>
+
+        {/* Home Assistant IoT & Automation Config */}
+        <div className="bg-brand-card p-6 border border-brand-border md:col-span-2">
+          <div className="flex items-center justify-between border-b border-brand-border pb-2 mb-4">
+            <h2 className="text-lg font-semibold text-brand-primary font-mono uppercase flex items-center gap-2">
+              <Radio className="w-5 h-5 text-brand-primary" />
+              Integração Home Assistant (Automação & IoT)
+            </h2>
+            <span className="text-xs font-mono uppercase px-2 py-0.5 rounded bg-blue-100/20 text-blue-400 border border-blue-500/30">
+              Admin Only
+            </span>
+          </div>
+
+          <p className="text-xs text-brand-muted mb-4">
+            Conecte o AssetTrack ao Home Assistant para telemetria em tempo real (sensores de temperatura, umidade, nobreaks/UPS, energia do CPD) e controle bidirecional (relés, tomadas inteligentes e switches).
+          </p>
+
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer group mb-2">
+              <input
+                type="checkbox"
+                name="home_assistant_enabled"
+                checked={settings.home_assistant_enabled === 'true'}
+                onChange={handleInputChange}
+                className="w-5 h-5 accent-brand-primary bg-brand-dark border-brand-border"
+              />
+              <span className="text-brand-text font-medium group-hover:text-brand-primary transition-colors">
+                Habilitar Módulo de Automação & IoT
+              </span>
+            </label>
+
+            {settings.home_assistant_enabled === 'true' && (
+              <div className="space-y-4 pt-2">
+                <div>
+                  <label className="block text-sm text-brand-muted mb-1 font-mono uppercase">
+                    URL do Home Assistant
+                  </label>
+                  <input
+                    type="text"
+                    name="home_assistant_url"
+                    placeholder="http://192.168.1.100:8123 ou http://homeassistant.local:8123"
+                    value={settings.home_assistant_url || ''}
+                    onChange={handleInputChange}
+                    className="w-full p-2.5 bg-brand-dark border border-brand-border text-brand-text focus:outline-none focus:border-brand-primary transition-colors placeholder-brand-muted/30"
+                  />
+                  <p className="mt-1 text-xs text-brand-muted">
+                    Endereço IP ou hostname interno com porta (padrão :8123). Não incluir barra no final.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-brand-muted mb-1 font-mono uppercase">
+                    Token de Acesso de Longa Duração (Long-Lived Access Token)
+                  </label>
+                  <input
+                    type="password"
+                    name="home_assistant_token"
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    value={settings.home_assistant_token || ''}
+                    onChange={handleInputChange}
+                    className="w-full p-2.5 bg-brand-dark border border-brand-border text-brand-text focus:outline-none focus:border-brand-primary transition-colors placeholder-brand-muted/30 font-mono text-xs"
+                  />
+                  <p className="mt-1 text-xs text-brand-muted">
+                    Gerado no Home Assistant em: <em>Perfil de Usuário &rarr; Tokens de Acesso de Longa Duração &rarr; Criar Token</em>.
+                  </p>
+                </div>
+
+                {haTestResult && (
+                  <div
+                    className={`p-3 text-xs border flex items-start gap-2 ${
+                      haTestResult.success
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-red-500/10 border-red-500/30 text-red-400'
+                    }`}
+                  >
+                    {haTestResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    )}
+                    <span>{haTestResult.message}</span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleTestHA}
+                    disabled={testingHA || !settings.home_assistant_url || !settings.home_assistant_token}
+                    className="flex h-10 items-center justify-center gap-2 border border-brand-primary bg-brand-primary/10 px-4 text-xs font-mono font-semibold uppercase tracking-wider text-brand-primary transition-colors hover:bg-brand-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingHA ? 'animate-spin' : ''}`} />
+                    {testingHA ? 'Testando Conexão...' : 'Testar Conexão com Home Assistant'}
+                  </button>
+                  <span className="text-[11px] text-brand-muted font-mono">
+                    Salva automaticamente os dados ao testar
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

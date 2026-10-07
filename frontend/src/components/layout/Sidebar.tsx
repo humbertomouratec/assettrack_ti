@@ -33,6 +33,7 @@ import {
   X,
   ChevronDown,
   Sparkles,
+  Radio,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -193,6 +194,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
           subtitle: 'Quadro ágil operacional',
           feature: 'kanban_enabled',
           keywords: 'kanban quadro tarefas projetos cards',
+        },
+        {
+          name: 'Automação & IoT',
+          path: '/automacao',
+          icon: Radio,
+          subtitle: 'Home Assistant & Sensores',
+          roleLimit: ['admin', 'gerente_ti', 'gerente_infra', 'tecnico'],
+          feature: 'home_assistant_enabled',
+          keywords: 'automacao iot home assistant sensores telemetria cpd nobreak tomadas reles energia switch',
         },
       ],
     },

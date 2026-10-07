@@ -103,6 +103,8 @@ func main() {
 		&models.GamificationActivityLog{},
 		&models.GamificationBadge{},
 		&models.UserBadge{},
+		&models.HomeAssistantEntity{},
+		&models.HomeAssistantCategory{},
 	); err != nil {
 		log.Fatalf("❌ Auto-migration failed: %v", err)
 	}

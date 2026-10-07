@@ -5,6 +5,7 @@ export interface FeatureFlags {
   purchases_enabled: boolean;
   kanban_enabled: boolean;
   ai_enabled: boolean;
+  home_assistant_enabled?: boolean;
 }
 
 export const getFeatureFlags = async (): Promise<FeatureFlags> => {

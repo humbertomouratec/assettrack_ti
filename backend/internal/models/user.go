@@ -82,5 +82,11 @@ func (u *User) CanAccessGamification() bool {
 		u.Role == RoleGerenteInfra || u.Role == RoleTecnico
 }
 
+// CanAccessHomeAssistant checks if user can view/control Home Assistant (admin, gerente_ti, gerente_infra, tecnico)
+func (u *User) CanAccessHomeAssistant() bool {
+	return u.Role == RoleAdmin || u.Role == RoleGerente ||
+		u.Role == RoleGerenteInfra || u.Role == RoleTecnico
+}
+
 // HasPIN returns whether user has a PIN configured
 func (u *User) HasPIN() bool { return u.PINHash != nil && *u.PINHash != "" }

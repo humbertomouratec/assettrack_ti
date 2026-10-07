@@ -122,6 +122,9 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	appHandler := handler.NewAppHandler()
 	systemUpdateSvc := service.NewSystemUpdateService()
 	systemUpdateHandler := handler.NewSystemUpdateHandler(systemUpdateSvc)
+	homeAssistantRepo := repository.NewHomeAssistantRepository(db)
+	homeAssistantSvc := service.NewHomeAssistantService(homeAssistantRepo, systemSettingsRepo)
+	homeAssistantHandler := handler.NewHomeAssistantHandler(homeAssistantSvc, homeAssistantRepo)
 
 	// Gamification
 	gamificationRepo := repository.NewGamificationRepository(db)
@@ -139,6 +142,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	rManagerOrRH := middleware.RequireManagerOrRH()
 	rRH := middleware.RequireRH()
 	rGamification := middleware.RequireGamificationAccess()
+	rHomeAssistant := middleware.RequireHomeAssistantAccess()
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -570,6 +574,27 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			gamification.GET("/me", gamificationHandler.GetMyProfile)
 			gamification.GET("/leaderboard", gamificationHandler.GetLeaderboard)
 			gamification.GET("/user/:id", gamificationHandler.GetUserProfileByID)
+		}
+
+		// Home Assistant IoT & Automation routes (acesso exclusivo: gerentes, técnicos e administradores)
+		homeAssistant := v1.Group("/home-assistant", authMW, rActive, rHomeAssistant)
+		{
+			homeAssistant.GET("/overview", homeAssistantHandler.GetOverview)
+			homeAssistant.POST("/service", homeAssistantHandler.CallService)
+			homeAssistant.GET("/asset/:id/telemetry", homeAssistantHandler.GetAssetTelemetry)
+			homeAssistant.GET("/bindings", homeAssistantHandler.ListBindings)
+			homeAssistant.POST("/bindings", homeAssistantHandler.SaveBinding)
+			homeAssistant.PATCH("/visibility", homeAssistantHandler.SetVisibility)
+			homeAssistant.DELETE("/bindings/:id", homeAssistantHandler.DeleteBinding)
+			homeAssistant.GET("/categories", homeAssistantHandler.ListCategories)
+			homeAssistant.POST("/categories", homeAssistantHandler.CreateCategory)
+			homeAssistant.PUT("/categories/:id", homeAssistantHandler.UpdateCategory)
+			homeAssistant.DELETE("/categories/:id", homeAssistantHandler.DeleteCategory)
+		}
+
+		adminHomeAssistant := v1.Group("/admin/home-assistant", authMW, rActive, rAdmin)
+		{
+			adminHomeAssistant.POST("/test", homeAssistantHandler.TestConnection)
 		}
 	}
 
