@@ -65,7 +65,7 @@ echo "⏳ Aguardando API (Go) ficar saudável..."
 MAX_WAIT=60
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if curl -s http://localhost:8080/health | grep -q '"status":"ok"'; then
+    if curl -s "http://localhost:${API_PORT:-8080}/health" | grep -q '"status":"ok"'; then
         echo "✅ API (Go) está ativa e saudável!"
         break
     fi
@@ -89,9 +89,9 @@ echo ""
 echo "------------------------------------------------"
 echo "✅ AssetTrack TI iniciado com sucesso!"
 echo "------------------------------------------------"
-echo "🌐 Frontend URL: http://${HOST_IP}:8000"
-echo "🌐 Backend API:  http://${HOST_IP}:8080/api/v1"
-echo "🌐 API Health:   http://localhost:8080/health"
+echo "🌐 Frontend URL: http://${HOST_IP}:${WEB_PORT:-8000}"
+echo "🌐 Backend API:  http://${HOST_IP}:${API_PORT:-8080}/api/v1"
+echo "🌐 API Health:   http://localhost:${API_PORT:-8080}/health"
 echo "📱 APK Android:  gere pelo terminal e anexe com: ./scripts/publish_mobile_apk.sh /caminho/arquivo.apk"
 echo "👤 Admin Padrão: admin@example.com"
 echo "🔑 Senha:        admin"
