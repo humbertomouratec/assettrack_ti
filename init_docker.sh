@@ -46,8 +46,8 @@ echo "🛑 Parando containers antigos..."
 "${COMPOSE_CMD[@]}" down --remove-orphans 2>/dev/null || true
 
 # Garantir remoção de processos conflitantes nas portas 8080, 8000, 5456 e 6380
-PORT_8080=$(docker ps -a --filter "publish=8080" -q 2>/dev/null || true)
-PORT_8000=$(docker ps -a --filter "publish=8000" -q 2>/dev/null || true)
+PORT_8080=$(docker ps -a --filter "publish=${API_PORT:-8080}" -q 2>/dev/null || true)
+PORT_8000=$(docker ps -a --filter "publish=${WEB_PORT:-8000}" -q 2>/dev/null || true)
 PORT_5456=$(docker ps -a --filter "publish=${DB_PORT:-5456}" -q 2>/dev/null || true)
 PORT_6380=$(docker ps -a --filter "publish=${REDIS_PORT:-6380}" -q 2>/dev/null || true)
 CONFLICT_CONTAINERS=$(echo "$PORT_8080 $PORT_8000 $PORT_5456 $PORT_6380" | xargs)
