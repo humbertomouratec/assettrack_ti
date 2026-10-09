@@ -1295,7 +1295,7 @@ export const HomeAssistantPage: React.FC = () => {
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 font-mono flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
               <p>
-                A interrupção de energia em nobreaks, tomadas de servidores ou réguas do CPD pode provocar indisponibilidade de serviços e perda de dados. Tem certeza de que deseja prosseguir?
+                A interrupção de energia, tomadas ou réguas pode provocar indisponibilidade. Tem certeza de que deseja prosseguir?
               </p>
             </div>
 
