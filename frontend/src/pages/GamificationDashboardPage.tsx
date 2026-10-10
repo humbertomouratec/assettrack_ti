@@ -116,6 +116,9 @@ export const GamificationDashboardPage: React.FC = () => {
         return <Star className="h-4 w-4 text-amber-500" />;
       case 'qr_scan':
         return <QrCode className="h-4 w-4 text-indigo-600" />;
+      case 'emergency_alert':
+      case 'resolutor_crises':
+        return <Flame className="h-4 w-4 text-rose-600" />;
       default:
         return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
     }

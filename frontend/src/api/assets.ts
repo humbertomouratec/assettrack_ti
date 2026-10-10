@@ -212,6 +212,10 @@ export const assetsApi = {
     return response.data;
   },
 
+  logQRScan: async (id: number): Promise<void> => {
+    await apiClient.post(`/assets/${id}/qr-scan-log`);
+  },
+
   getQRCodeUrl: (id: number): string => {
     const token = localStorage.getItem('token');
     return `${API_BASE_URL}/assets/${id}/qrcode?token=${token || ''}`;

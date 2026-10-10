@@ -19,6 +19,7 @@ import (
 	"github.com/assettrack/backend/internal/middleware"
 	"github.com/assettrack/backend/internal/models"
 	"github.com/assettrack/backend/internal/repository"
+	"github.com/assettrack/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	qrcode "github.com/skip2/go-qrcode"
 	qrdecoder "github.com/tuotoo/qrcode"
@@ -26,8 +27,13 @@ import (
 )
 
 type AssetHandler struct {
-	repo         *repository.AssetRepository
-	categoryRepo *repository.AssetCategoryRepository
+	repo            *repository.AssetRepository
+	categoryRepo    *repository.AssetCategoryRepository
+	gamificationSvc *service.GamificationService
+}
+
+func (h *AssetHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 func sameAssetUserID(left, right *uint) bool {
@@ -1131,7 +1137,62 @@ func (h *AssetHandler) ScanQRCode(c *gin.Context) {
 		return
 	}
 
+	// Gamificação: premiar técnico pela leitura de QR Code
+	if h.gamificationSvc != nil {
+		user := middleware.GetCurrentUser(c)
+		if user != nil && user.CanAccessGamification() {
+			assetID := asset.ID
+			ep := asset.EPatrimonio
+			go func(uID uint, aID uint, p string) {
+				_, _ = h.gamificationSvc.AwardActivityXP(
+					uID,
+					"qr_scan",
+					&aID,
+					20,
+					10,
+					fmt.Sprintf("Leitura QR Code do ativo #%s", p),
+					0,
+				)
+			}(user.ID, assetID, ep)
+		}
+	}
+
 	c.JSON(http.StatusOK, asset)
+}
+
+func (h *AssetHandler) AuditScanQR(c *gin.Context) {
+	idStr := c.Param("id")
+	assetID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de ativo inválido"})
+		return
+	}
+	user := middleware.GetCurrentUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Não autenticado"})
+		return
+	}
+	asset, err := h.repo.GetByID(uint(assetID))
+	if err != nil || asset == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Ativo não encontrado"})
+		return
+	}
+	if h.gamificationSvc != nil && user.CanAccessGamification() {
+		aID := asset.ID
+		ep := asset.EPatrimonio
+		go func(uID uint, a uint, p string) {
+			_, _ = h.gamificationSvc.AwardActivityXP(
+				uID,
+				"qr_scan",
+				&a,
+				20,
+				10,
+				fmt.Sprintf("Auditoria/Leitura QR Code do ativo #%s", p),
+				0,
+			)
+		}(user.ID, aID, ep)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "asset_id": asset.ID})
 }
 
 type BulkCopySpec struct {

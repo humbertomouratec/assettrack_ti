@@ -952,6 +952,7 @@ export const AssetsPage: React.FC = () => {
         setSelectedAssetForDetail(targetAsset);
         setShowDetailModal(true);
         setGlobalSuccess(`Ativo #${targetAsset.e_patrimonio} (${targetAsset.nome}) localizado e aberto com sucesso!`);
+        assetsApi.logQRScan(targetAsset.id).catch(() => {});
       } else {
         setScannerError(`Nenhum ativo encontrado para o código "${query}".`);
       }

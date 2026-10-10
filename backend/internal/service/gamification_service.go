@@ -209,6 +209,8 @@ func (s *GamificationService) AwardActivityXP(
 		profile.QRScansRealizados++
 	case "rating_5_star":
 		profile.AvaliacoesCincoEstrelas++
+	case "emergency_alert", "resolutor_crises":
+		profile.EmergenciasAtendidas++
 	}
 
 	newLevel := s.CalculateLevel(profile.XPTotal)
@@ -301,6 +303,9 @@ func (s *GamificationService) checkBadges(profile *models.UserGamificationProfil
 	}
 	if profile.ManutencoesConcluidas >= 5 {
 		tryAward("mestre_reparos")
+	}
+	if profile.EmergenciasAtendidas >= 1 {
+		tryAward("resolutor_crises")
 	}
 
 	return awarded

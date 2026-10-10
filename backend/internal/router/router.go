@@ -133,6 +133,10 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	serviceDeskHandler.SetGamificationService(gamificationSvc)
 	preventiveHandler.SetGamificationService(gamificationSvc)
 	maintenanceHandler.SetGamificationService(gamificationSvc)
+	kanbanHandler.SetGamificationService(gamificationSvc)
+	alertsHandler.SetGamificationService(gamificationSvc)
+	assetHandler.SetGamificationService(gamificationSvc)
+	qrHandler.SetGamificationService(gamificationSvc)
 
 	// Auth middleware helper
 	authMW := middleware.AuthMiddleware(authSvc, userRepo)
@@ -204,6 +208,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			assets.GET("/:id/qrcode", assetHandler.GetQRCode)
 			assets.GET("/:id/datasheet", assetHandler.DownloadDatasheet)
 			assets.POST("/scan-qr", assetHandler.ScanQRCode)
+			assets.POST("/:id/qr-scan-log", assetHandler.AuditScanQR)
 		}
 
 		// Service Desk routes (protected)

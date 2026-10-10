@@ -60,6 +60,11 @@ type AlertsHandler struct {
 	assetRepo  *repository.AssetRepository
 	broker     *AlertSSEBroker
 	dispatcher *service.WebhookDispatcher
+	gamificationSvc *service.GamificationService
+}
+
+func (h *AlertsHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 func NewAlertsHandler(
@@ -262,6 +267,23 @@ func (h *AlertsHandler) MarkAtendido(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Gamificação: premiar técnico ao normalizar emergência crítica
+	if h.gamificationSvc != nil && user.CanAccessGamification() {
+		alertID := uint(id)
+		go func(tID uint, aID uint) {
+			_, _ = h.gamificationSvc.AwardActivityXP(
+				tID,
+				"emergency_alert",
+				&aID,
+				100,
+				50,
+				fmt.Sprintf("Ocorrência crítica de emergência #%d normalizada", aID),
+				50,
+			)
+		}(user.ID, alertID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 

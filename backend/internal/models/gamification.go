@@ -20,6 +20,7 @@ type UserGamificationProfile struct {
 	KanbanConcluidos       int        `gorm:"default:0;not null" json:"kanban_concluidos"`
 	QRScansRealizados      int        `gorm:"default:0;not null" json:"qr_scans_realizados"`
 	AvaliacoesCincoEstrelas int       `gorm:"default:0;not null" json:"avaliacoes_cinco_estrelas"`
+	EmergenciasAtendidas    int       `gorm:"default:0;not null" json:"emergencias_atendidas"`
 	CreatedAt              time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt              time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 

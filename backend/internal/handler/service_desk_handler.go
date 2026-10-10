@@ -382,41 +382,50 @@ func (h *ServiceDeskHandler) UpdateTicket(c *gin.Context) {
 	}
 
 	// Gamificação: premiar técnico ao resolver chamado ou receber nota máxima
-	if h.gamificationSvc != nil && ticket.TecnicoID != nil && *ticket.TecnicoID > 0 {
-		isResolved := (ticket.Status == models.ServiceStatusResolvido || ticket.Status == models.ServiceStatusFechado)
-		wasNotResolved := (previousStatus != models.ServiceStatusResolvido && previousStatus != models.ServiceStatusFechado)
-
-		if isResolved && wasNotResolved {
-			baseXP := 60
-			extraBonus := 0
-			if ticket.Prioridade == models.ServicePriorityUrgente {
-				baseXP = 120
-			}
-			go func(techID uint, ticketID uint, cod string, bxp int, ebonus int) {
-				_, _ = h.gamificationSvc.AwardActivityXP(
-					techID,
-					"service_desk",
-					&ticketID,
-					bxp,
-					30,
-					fmt.Sprintf("Chamado %s atendido e concluído", cod),
-					ebonus,
-				)
-			}(*ticket.TecnicoID, ticket.ID, ticket.Codigo, baseXP, extraBonus)
+	if h.gamificationSvc != nil {
+		var techID uint
+		if ticket.TecnicoID != nil && *ticket.TecnicoID > 0 {
+			techID = *ticket.TecnicoID
+		} else if user != nil && user.CanAccessGamification() {
+			techID = user.ID
 		}
 
-		if req.Avaliacao != nil && *req.Avaliacao == 5 {
-			go func(techID uint, ticketID uint, cod string) {
-				_, _ = h.gamificationSvc.AwardActivityXP(
-					techID,
-					"rating_5_star",
-					&ticketID,
-					40,
-					25,
-					fmt.Sprintf("Avaliação máxima (5 estrelas) no chamado %s", cod),
-					10,
-				)
-			}(*ticket.TecnicoID, ticket.ID, ticket.Codigo)
+		if techID > 0 {
+			isResolved := (ticket.Status == models.ServiceStatusResolvido || ticket.Status == models.ServiceStatusFechado)
+			wasNotResolved := (previousStatus != models.ServiceStatusResolvido && previousStatus != models.ServiceStatusFechado)
+
+			if isResolved && wasNotResolved {
+				baseXP := 60
+				extraBonus := 0
+				if ticket.Prioridade == models.ServicePriorityUrgente {
+					baseXP = 120
+				}
+				go func(tID uint, ticketID uint, cod string, bxp int, ebonus int) {
+					_, _ = h.gamificationSvc.AwardActivityXP(
+						tID,
+						"service_desk",
+						&ticketID,
+						bxp,
+						30,
+						fmt.Sprintf("Chamado %s atendido e concluído", cod),
+						ebonus,
+					)
+				}(techID, ticket.ID, ticket.Codigo, baseXP, extraBonus)
+			}
+
+			if req.Avaliacao != nil && *req.Avaliacao == 5 {
+				go func(tID uint, ticketID uint, cod string) {
+					_, _ = h.gamificationSvc.AwardActivityXP(
+						tID,
+						"rating_5_star",
+						&ticketID,
+						40,
+						25,
+						fmt.Sprintf("Avaliação máxima (5 estrelas) no chamado %s", cod),
+						10,
+					)
+				}(techID, ticket.ID, ticket.Codigo)
+			}
 		}
 	}
 

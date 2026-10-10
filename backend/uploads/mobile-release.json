@@ -1,9 +1,9 @@
 {
-  "version_code": 1790602561,
-  "version_name": "2026.09.28.1336",
-  "release_date": "2026-09-28T13:36:01Z",
-  "apk_filename": "app-release.apk",
-  "apk_size_bytes": 8279549,
+  "version_code": 1791660104,
+  "version_name": "2026.10.10.1921",
+  "release_date": "2026-10-10T19:21:44Z",
+  "apk_filename": "AssetTrack-TI.apk",
+  "apk_size_bytes": 8302078,
   "apk_size_formatted": "7.9 MB",
   "min_android_version": "Android 7.0 (Nougat) ou superior",
   "release_notes": "• APK anexado manualmente após build realizado via terminal.\n• Download salvo no portal de backups e distribuição.\n• Metadados de release atualizados no anexo."

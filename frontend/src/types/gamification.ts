@@ -13,6 +13,7 @@ export interface GamificationProfile {
   kanban_concluidos: number;
   qr_scans_realizados: number;
   avaliacoes_cinco_estrelas: number;
+  emergencias_atendidas?: number;
   created_at?: string;
   updated_at?: string;
 }

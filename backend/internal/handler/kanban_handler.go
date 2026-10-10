@@ -104,6 +104,11 @@ type KanbanHandler struct {
 	broker          *KanbanSSEBroker
 	settingsRepo    repository.SystemSettingsRepository
 	emailSvc        service.EmailService
+	gamificationSvc *service.GamificationService
+}
+
+func (h *KanbanHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 func NewKanbanHandler(
@@ -1344,6 +1349,34 @@ func (h *KanbanHandler) MoveCard(c *gin.Context) {
 			assetIDs = append(assetIDs, a.ID)
 		}
 		h.syncKanbanAssetsMaintenance(cardFull, assetIDs, user.ID, in.Motivo)
+	}
+
+	// Gamificação: premiar técnico ao concluir card Kanban
+	if sourceColName != targetColName && h.gamificationSvc != nil {
+		normTarget := strings.ToLower(strings.TrimSpace(targetColName))
+		normSource := strings.ToLower(strings.TrimSpace(sourceColName))
+		isDoneColumn := normTarget == "concluído" || normTarget == "concluido" || normTarget == "done" || normTarget == "finalizado" || normTarget == "pronto"
+		wasDoneColumn := normSource == "concluído" || normSource == "concluido" || normSource == "done" || normSource == "finalizado" || normSource == "pronto"
+
+		if isDoneColumn && !wasDoneColumn {
+			techID := user.ID
+			if card.ResponsavelID != nil && *card.ResponsavelID > 0 {
+				techID = *card.ResponsavelID
+			}
+			cardID := card.ID
+			cardTitle := card.Titulo
+			go func(tID uint, cID uint, tit string) {
+				_, _ = h.gamificationSvc.AwardActivityXP(
+					tID,
+					"kanban",
+					&cID,
+					50,
+					25,
+					fmt.Sprintf("Card Kanban '%s' concluído", tit),
+					0,
+				)
+			}(techID, cardID, cardTitle)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "card_id": card.ID, "column_id": in.ColumnID})

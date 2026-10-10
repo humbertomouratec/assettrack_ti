@@ -22,6 +22,11 @@ type QRHandler struct {
 	txRepo    *repository.TransactionRepository
 	maintRepo *repository.MaintenanceRepository
 	assetRepo *repository.AssetRepository
+	gamificationSvc *service.GamificationService
+}
+
+func (h *QRHandler) SetGamificationService(svc *service.GamificationService) {
+	h.gamificationSvc = svc
 }
 
 func NewQRHandler(
@@ -410,6 +415,22 @@ func (h *QRHandler) DeliveryConfirm(c *gin.Context) {
 			}
 		}
 
+		// Gamificação: premiar técnico pela validação de entrega via QR
+		if h.gamificationSvc != nil && confirmador != nil && confirmador.CanAccessGamification() {
+			solID := sol.ID
+			go func(uID uint, sID uint) {
+				_, _ = h.gamificationSvc.AwardActivityXP(
+					uID,
+					"qr_scan",
+					&sID,
+					25,
+					15,
+					"Entrega de equipamento validada via QR Code",
+					0,
+				)
+			}(confirmador.ID, solID)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"message": "Entrega de empréstimo confirmada com sucesso"})
 		return
 	}
@@ -489,6 +510,22 @@ func (h *QRHandler) DeliveryConfirm(c *gin.Context) {
 			Observacao: req.Observacao,
 		}
 		_ = h.txRepo.CreateMovement(mov)
+
+		// Gamificação: premiar técnico pela validação de entrega via QR
+		if h.gamificationSvc != nil && confirmador != nil && confirmador.CanAccessGamification() {
+			mID := reqMaint.ID
+			go func(uID uint, mid uint) {
+				_, _ = h.gamificationSvc.AwardActivityXP(
+					uID,
+					"qr_scan",
+					&mid,
+					25,
+					15,
+					"Devolução de equipamento validada via QR Code",
+					0,
+				)
+			}(confirmador.ID, mID)
+		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Entrega de manutenção confirmada com sucesso"})
 		return
