@@ -25,6 +25,7 @@ const EmailLogsPage = lazy(() => import('./pages/EmailLogsPage').then(m => ({ de
 const SetoresPage = lazy(() => import('./pages/SetoresPage').then(m => ({ default: m.SetoresPage })));
 const MonitoramentoPage = lazy(() => import('./pages/MonitoramentoPage').then(m => ({ default: m.MonitoramentoPage })));
 const ManualPage = lazy(() => import('./pages/ManualPage').then(m => ({ default: m.ManualPage })));
+const WikiPage = lazy(() => import('./pages/WikiPage').then(m => ({ default: m.WikiPage })));
 const GamificationDashboardPage = lazy(() => import('./pages/GamificationDashboardPage').then(m => ({ default: m.GamificationDashboardPage })));
 const HomeAssistantPage = lazy(() => import('./pages/HomeAssistantPage').then(m => ({ default: m.HomeAssistantPage })));
 import { AppUpdateNotifier } from './components/layout/AppUpdateNotifier';
@@ -66,6 +67,14 @@ const App: React.FC = () => {
             element={
               <MainLayout>
                 <ManualPage />
+              </MainLayout>
+            }
+          />
+          <Route
+            path="/wiki"
+            element={
+              <MainLayout>
+                <WikiPage />
               </MainLayout>
             }
           />

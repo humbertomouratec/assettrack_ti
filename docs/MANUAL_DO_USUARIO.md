@@ -263,3 +263,22 @@ Ao acessar a aplicação pelo navegador do celular usando o endereço da rede, p
 2. No Chrome/Android, toque no menu do navegador e escolha **Adicionar à tela inicial** ou **Instalar app**.
 3. No Safari/iPhone, use o botão de compartilhamento e escolha **Adicionar à Tela de Início**.
 4. Depois de instalado, o AssetTrack TI abre em modo aplicativo, mantendo o mesmo endereço da aplicação local.
+
+---
+
+## 📚 18. Wiki e Base de Conhecimento
+
+Em **Wiki & Manuais** (`/wiki`), colaboradores, gestores e administradores acessam a documentação técnica e operacional da empresa:
+
+1. **Navegação Superior e Catálogo de Manuais:**
+   - Utilize o painel no topo da página para filtrar por **Categorias** (Globais ou do seu Departamento) e pesquisar manuais pelo título ou conteúdo.
+   - Clique em qualquer card de manual para abrir a leitura completa logo abaixo, ou clique em **Novo Artigo** (caso possua permissão de escrita).
+2. **Editor de Texto Completo (WYSIWYG):**
+   - **Formatação ao Selecionar Texto:** Selecione qualquer trecho de texto para abrir o menu flutuante rápido (*Bubble Menu*) ou use a barra superior fixa para aplicar **Negrito**, *Itálico*, <u>Sublinhado</u>, Tachado, Cores de Texto, Marca-Texto, tipos de fonte e tamanhos de fonte (`12px` a `36px`).
+   - **Tabelas Interativas:** Clique no botão **Tabela** para escolher a grade visual (ex.: `3x3`, `4x4`) ou definir linhas e colunas personalizadas. Ao clicar dentro de uma tabela, uma barra contextual permite adicionar/remover linhas e colunas a qualquer momento.
+   - **Imagens e Vídeos (até 50MB):** Arraste e solte arquivos (*Drag & Drop*), cole prints diretamente com `Ctrl+V` ou use o botão **Mídia**. Clique sobre qualquer imagem ou vídeo inserido para redimensionar pelo controle deslizante (`15%` a `100%`), arrastar a alça lateral `↔ Arrastar Tamanho` ou alinhar à esquerda/centro/direita.
+3. **Histórico de Revisões:**
+   - No modo de leitura do manual, clique em **Revisões** para inspecionar quem editou o artigo, a data/hora e o conteúdo anterior de cada versão.
+4. **Permissões por Equipe (Gestores e Administradores):**
+   - Na aba **Permissões da Equipe (RBAC)**, o Gestor do Departamento define visualmente quem do seu setor possui acesso **Sem Acesso**, **Leitura** ou **Escrita** em cada categoria do departamento e salva todas as alterações em lote (*Salvar Alterações em Lote*).
+   - Administradores também contam com o botão global no topo da página para **Ativar/Desativar o Módulo Wiki** em todo o sistema.

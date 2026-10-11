@@ -410,6 +410,21 @@ O sistema possui uma arquitetura modular e flexível que permite ao administrado
 
 ---
 
+## 📚 Wiki e Base de Conhecimento (RBAC & Editor WYSIWYG)
+
+Módulo nativo e 100% isolado (`backend/internal/wiki`) para documentação técnica, procedimentos operacionais padrão (POPs) e manuais por setor:
+
+| Recurso | Descrição |
+| :--- | :--- |
+| **Feature Toggle Global (`system_modules`)** | Ativação/desativação global em tempo real pelo Administrador com middleware de bloqueio imediato (`403 Forbidden`) e cache em memória. |
+| **Controle de Acesso por Departamento (RBAC)** | Categorias globais ou restritas por setor (`departamentos`). O Gestor do Departamento gerencia autonomamente quem de sua equipe possui acesso `none`, `read` ou `write` com atualização em lote (*Bulk Update*). |
+| **Editor Rich Text Moderno (WYSIWYG)** | Seleção de texto com *Bubble Menu* flutuante, famílias de fonte, tamanhos (`12px` a `36px`), negrito, itálico, sublinhado, cores, blocos de código, gerador interativo de tabelas, redimensionamento visual de imagens (`15%`–`100%`) e quebra automática de linha nas bordas. |
+| **Upload de Mídia Local (`./uploads/wiki/`)** | Suporte a *Drag and Drop* e colagem da área de transferência (*Clipboard Paste*) para imagens e vídeos curtos (`.mp4`, `.webm`, `.mov`) de até 50MB com validação de extensão e *Magic Bytes*. |
+| **Histórico de Revisões (`wiki_article_revisions`)** | Auditoria transacional automática de todas as edições com autor, data/hora, resumo da alteração e snapshot do conteúdo anterior. |
+| **Auto-Provisionamento de Schema** | Criação e *seed* idempotentes das tabelas na inicialização da API (`EnsureSchema`), sem exigir alterações em scripts `.sh`. |
+
+---
+
 ## 🛠️ Segurança e Auditoria
 
 - 🔒 **Rate Limiting**: Proteção contra força bruta nos logins.

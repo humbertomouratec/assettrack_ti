@@ -264,6 +264,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile = false, onCloseM
           keywords: 'rh departamento pessoal ferias escala comunicados',
         },
         {
+          name: 'Wiki & Conhecimento',
+          path: '/wiki',
+          icon: BookOpen,
+          subtitle: 'Manuais, procedimentos e RBAC',
+          badge: 'NOVO',
+          badgeColor: 'bg-blue-500/15 text-blue-700 border-blue-500/30',
+          keywords: 'wiki base conhecimento manuais procedimentos pop rbac artigos',
+        },
+        {
           name: 'Manual do Sistema',
           path: '/manual',
           icon: BookOpen,

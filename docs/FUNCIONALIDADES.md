@@ -276,6 +276,22 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 
 ---
 
+## 📚 Wiki e Base de Conhecimento
+
+- **Ativação Global (`system_modules`):** O Administrador pode ativar ou desativar o módulo Wiki globalmente com efeito imediato em todas as rotas `/api/v1/wiki/*`.
+- **RBAC por Departamento e Gestores:** Categorias podem ser globais ou vinculadas a um departamento (`departamentos`). O Gestor do setor gerencia em lote (*Bulk Update*) quais colaboradores de sua equipe possuem acesso `none`, `read` ou `write`.
+- **Layout Top-Down Expandido:** Navegação de categorias e catálogo horizontal de artigos na parte superior e área de leitura/edição em largura total abaixo (`max-w-[1680px]`), com quebra automática de texto nas bordas.
+- **Editor Rich Text Completo (WYSIWYG):**
+  - Barra flutuante (*Bubble Menu*) ao selecionar texto e barra superior fixa com preservação de seleção.
+  - Seletor de tipos de fonte (Padrão UI, Sans-Serif, Serif Editorial, Monoespaçada) e tamanhos de fonte (`12px` a `36px`).
+  - Formatação em negrito, itálico, sublinhado, tachado, cores de texto, marca-texto, alinhamentos, listas, citações e blocos de código escuro.
+  - **Gerador e Editor de Tabelas:** Grade visual interativa `6x6` ou dimensões customizadas, com barra contextual para adicionar/remover linhas e colunas.
+  - **Redimensionamento Interativo de Imagens e Vídeos:** Alça de arraste (`↔ Arrastar Tamanho`), controle deslizante (`15%` a `100%`), ajustes rápidos (`-10%`, `+10%`, `25%`, `50%`, `75%`, `100%`) e alinhamento da mídia.
+- **Upload Local de Mídias (`./uploads/wiki/`):** Suporte a *Drag and Drop* e colagem (*Ctrl+V*) de imagens e vídeos (`.mp4`, `.webm`, `.mov`) de até 50MB.
+- **Histórico de Revisões:** Registro automático de quem editou cada manual, data/hora e conteúdo anterior para auditoria e restauração.
+
+---
+
 ## 🗺️ Mapa de Páginas
 
 | Rota | Funcionalidade |
@@ -297,6 +313,7 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 | `/compras` | Compras, cotações, pedidos, estoque, contratos e pesquisas |
 | `/compras/fornecedores` | Cadastro de fornecedores dentro do módulo de compras |
 | `/rh` | Portal RH, termos, status da equipe e comunicados |
+| `/wiki` | Wiki e Base de Conhecimento, editor rico WYSIWYG e permissões RBAC por setor |
 | `/webhooks` | Integrações via webhook |
 | `/backups` | Backup e restore |
 | `/profile` | Perfil, avatar, senha e portal RH pessoal |

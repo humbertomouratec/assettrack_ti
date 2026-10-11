@@ -346,6 +346,45 @@ Para detalhes completos de payload e arquitetura, consulte [`docs/ATUALIZACAO_SI
 
 ---
 
+## 📚 Wiki e Base de Conhecimento (`/wiki`)
+
+Todas as rotas abaixo são protegidas por autenticação JWT e pelo middleware `WikiFeatureToggleMiddleware` (retorna `403 Forbidden` caso o módulo `wiki` esteja desativado em `system_modules`).
+
+### GET `/wiki/articles`
+Lista os artigos visíveis ao usuário autenticado aplicando rigorosamente o filtro RBAC (Administrador Geral, Gestor do Departamento, categorias globais sem bloqueio ou permissão explícita `read`/`write` em `wiki_permissions`). Suporta query params `category_id` e `q` (busca textual).
+
+### GET `/wiki/articles/:id`
+Retorna os detalhes e o conteúdo Rich Text (HTML/JSON) de um artigo específico, validando permissão de leitura na categoria.
+
+### POST `/wiki/articles`
+Cria um novo artigo na Wiki (requer permissão `write` na categoria, Gestor do setor ou Administrador).
+
+### PUT `/wiki/articles/:id`
+Atualiza um artigo existente em transação SQL, gravando automaticamente a versão anterior em `wiki_article_revisions` (`edited_by`, `previous_title`, `previous_content`, `change_summary`, `created_at`).
+
+### GET `/wiki/articles/:id/revisions`
+Lista o histórico cronológico de revisões e auditoria de um artigo.
+
+### GET `/wiki/categories` & POST `/wiki/categories`
+Lista as categorias acessíveis (globais e departamentais) ou cria uma nova categoria vinculada opcionalmente a um `department_id`.
+
+### GET `/wiki/departments`
+Lista os setores/departamentos disponíveis para gerenciamento de permissões da Wiki.
+
+### GET `/wiki/departments/:departmentId/permissions-matrix`
+Carrega os colaboradores do departamento, as categorias da Wiki daquele setor e a matriz atual de permissões (`none`, `read`, `write`) para o painel do Gestor.
+
+### PUT `/wiki/permissions/bulk`
+Atualiza em lote (*Bulk Update* transacional) os níveis de acesso da equipe de um departamento, impedindo que um Gestor altere categorias ou usuários de outros setores.
+
+### POST `/wiki/upload` (ou `/wiki/media/upload`)
+Recebe arquivos de mídia via `multipart/form-data` (limite de **50MB**), valida extensão (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.svg`, `.mp4`, `.webm`, `.mov`) e *Magic Bytes*, salva em `./uploads/wiki/` com nome único baseado em timestamp e retorna `{ "url": "/uploads/wiki/..." }`.
+
+### GET `/wiki/admin/module-status` & PUT `/wiki/admin/module-toggle`
+Consulta ou altera globalmente o status de ativação do módulo Wiki (exclusivo para Administrador) e invalida o cache em memória imediatamente.
+
+---
+
 # Rotas do Frontend (React Router)
 
 As rotas abaixo representam as páginas atuais da SPA em React. Elas são renderizadas no frontend e consomem a API REST em `/api/v1`.
@@ -367,6 +406,7 @@ As rotas abaixo representam as páginas atuais da SPA em React. Elas são render
 | `/alertas` | Alertas de emergência |
 | `/compras` | Compras / Procurement |
 | `/rh` | Portal RH |
+| `/wiki` | Wiki e Base de Conhecimento (Artigos, Editor WYSIWYG e Matriz RBAC por Setor) |
 | `/monitoramento` | Sala de monitoramento para TV |
 | `/webhooks` | Webhooks |
 | `/backups` | Backup & Restore |
@@ -381,6 +421,7 @@ As rotas abaixo representam as páginas atuais da SPA em React. Elas são render
 - Configurações administrativas são feitas via `GET/PUT /api/v1/admin/settings`.
 - Alertas aceitam dois estágios operacionais distintos: `ciente` e `atendido`.
 - A manutenção preventiva possui rotas REST próprias em `/api/v1/preventiva/*`.
+- O módulo de Wiki possui rotas REST isoladas em `/api/v1/wiki/*` e serve arquivos estáticos de mídia em `/uploads/wiki/*`.
 - O RH controla a exibição de colaboradores na sala por `PUT /api/v1/rh/colaboradores/:id/monitoramento`.
 - A sala de monitoramento consulta os colaboradores selecionados em `GET /api/v1/monitoramento/equipe-rh`.
 

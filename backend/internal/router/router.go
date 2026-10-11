@@ -6,6 +6,7 @@ import (
 	"github.com/assettrack/backend/internal/middleware"
 	"github.com/assettrack/backend/internal/repository"
 	"github.com/assettrack/backend/internal/service"
+	"github.com/assettrack/backend/internal/wiki"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -600,6 +601,12 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		adminHomeAssistant := v1.Group("/admin/home-assistant", authMW, rActive, rAdmin)
 		{
 			adminHomeAssistant.POST("/test", homeAssistantHandler.TestConnection)
+		}
+
+		// Wiki & Base de Conhecimento (isolated module)
+		if sqlDB, err := db.DB(); err == nil {
+			wikiAuthGroup := v1.Group("", authMW, rActive)
+			wiki.RegisterGinWikiRoutes(wikiAuthGroup, sqlDB)
 		}
 	}
 
