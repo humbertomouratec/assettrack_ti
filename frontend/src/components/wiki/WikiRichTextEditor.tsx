@@ -18,9 +18,11 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  HelpCircle,
   Highlighter,
   Image as ImageIcon,
   Italic,
+  Keyboard,
   Link as LinkIcon,
   List,
   ListOrdered,
@@ -134,6 +136,39 @@ const HIGHLIGHT_COLORS: ReadonlyArray<{ label: string; color: string; swatchClas
   { label: 'Azul Info', color: '#dbeafe', swatchClass: 'bg-blue-200' },
   { label: 'Verde OK', color: '#d1fae5', swatchClass: 'bg-emerald-200' },
   { label: 'Rosa Urgente', color: '#fee2e2', swatchClass: 'bg-red-200' },
+];
+
+const EDITOR_SHORTCUT_GROUPS: ReadonlyArray<{
+  category: string;
+  items: ReadonlyArray<{ keys: string[]; description: string; isNew?: boolean }>;
+}> = [
+  {
+    category: 'Formatação de Texto & Links',
+    items: [
+      { keys: ['Ctrl', 'B'], description: 'Aplicar ou remover Negrito' },
+      { keys: ['Ctrl', 'I'], description: 'Aplicar ou remover Itálico' },
+      { keys: ['Ctrl', 'U'], description: 'Aplicar ou remover Sublinhado' },
+      { keys: ['Ctrl', 'K'], description: 'Inserir ou editar Link no texto selecionado', isNew: true },
+      { keys: ['Enter'], description: 'Confirmar link (quando o Popover de Link estiver aberto)', isNew: true },
+    ],
+  },
+  {
+    category: 'Tabelas, Listas & Indentação',
+    items: [
+      { keys: ['Tab'], description: 'Avançar para a próxima célula da tabela (ou indentar texto)', isNew: true },
+      { keys: ['Shift', 'Tab'], description: 'Voltar para a célula anterior da tabela (ou recuar texto)', isNew: true },
+    ],
+  },
+  {
+    category: 'Edição, Mídia & Ajuda',
+    items: [
+      { keys: ['Ctrl', 'V'], description: 'Colar texto ou enviar print/imagem/vídeo da área de transferência' },
+      { keys: ['Ctrl', 'Z'], description: 'Desfazer última alteração' },
+      { keys: ['Ctrl', 'Y'], description: 'Refazer alteração' },
+      { keys: ['Alt', 'H'], description: 'Abrir ou fechar este guia rápido de atalhos (ou F1)', isNew: true },
+      { keys: ['Esc'], description: 'Fechar menus/popovers abertos ou desmarcar imagem/vídeo', isNew: true },
+    ],
+  },
 ];
 
 function getFileExtension(fileName: string): string {
@@ -282,6 +317,9 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
   const [linkUrlInput, setLinkUrlInput] = useState<string>('https://');
   const [linkTextInput, setLinkTextInput] = useState<string>('');
   const [activeAnchorEl, setActiveAnchorEl] = useState<HTMLAnchorElement | null>(null);
+
+  // Keyboard Shortcuts Help Popover State
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState<boolean>(false);
 
   // Active Table cell detection (for contextual table row/column controls)
   const [activeTableCell, setActiveTableCell] = useState<HTMLTableCellElement | null>(null);
@@ -456,7 +494,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     return fallbackRange;
   }, []);
 
-  // Close popovers on outside click or Escape key
+  // Close popovers on outside click, Escape key, or toggle Shortcuts Help via Alt+H / F1
   useEffect(() => {
     const handleOutsideMouseDown = (event: MouseEvent) => {
       if (!containerRef.current) return;
@@ -464,6 +502,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         setShowColorMenu(false);
         setShowTablePicker(false);
         setShowLinkPopover(false);
+        setShowShortcutsHelp(false);
         setBubbleMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
       }
     };
@@ -473,10 +512,22 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         setShowColorMenu(false);
         setShowTablePicker(false);
         setShowLinkPopover(false);
+        setShowShortcutsHelp(false);
         setBubbleMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
         if (selectedMediaEl) {
           selectedMediaEl.removeAttribute('data-wiki-selected');
           setSelectedMediaEl(null);
+        }
+        return;
+      }
+
+      if ((event.altKey && event.key.toLowerCase() === 'h') || event.key === 'F1') {
+        if (containerRef.current?.contains(document.activeElement) || showShortcutsHelp) {
+          event.preventDefault();
+          setShowShortcutsHelp((prev) => !prev);
+          setShowColorMenu(false);
+          setShowTablePicker(false);
+          setShowLinkPopover(false);
         }
       }
     };
@@ -487,7 +538,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
       document.removeEventListener('mousedown', handleOutsideMouseDown);
       document.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [selectedMediaEl]);
+  }, [selectedMediaEl, showShortcutsHelp]);
 
   // Execute standard rich-text command on the active selection
   const runCommand = useCallback(
@@ -1442,8 +1493,103 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
           </div>
 
-          {/* Right Controls: Fullscreen Toggle & Visual/HTML Mode Switcher */}
-          <div className="flex items-center gap-2">
+          {/* Right Controls: Shortcuts Help, Fullscreen Toggle & Visual/HTML Mode Switcher */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowShortcutsHelp((prev) => !prev);
+                  setShowColorMenu(false);
+                  setShowTablePicker(false);
+                  setShowLinkPopover(false);
+                }}
+                title="Guia de Teclas de Atalho (Pressione Alt+H ou F1 a qualquer momento)"
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                  showShortcutsHelp
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Keyboard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Atalhos</span>
+                <kbd
+                  className={`hidden sm:inline-block rounded px-1.5 py-0.5 font-mono text-[10px] border ${
+                    showShortcutsHelp
+                      ? 'border-blue-400 bg-blue-700 text-white'
+                      : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  Alt+H
+                </kbd>
+              </button>
+
+              {showShortcutsHelp && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-[340px] sm:w-[440px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-2xl space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Keyboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+                          Teclas de Atalho do Editor
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Dica: Pressione <kbd className="rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 font-mono text-[10px]">Alt + H</kbd> ou <kbd className="rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 font-mono text-[10px]">F1</kbd> para abrir/fechar esta ajuda
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowShortcutsHelp(false)}
+                      className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      aria-label="Fechar ajuda de atalhos"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[340px] overflow-y-auto space-y-3 pr-1">
+                    {EDITOR_SHORTCUT_GROUPS.map((group) => (
+                      <div key={group.category} className="space-y-1.5">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          {group.category}
+                        </span>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800/70 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60">
+                          {group.items.map((item) => (
+                            <div
+                              key={item.description}
+                              className="flex items-center justify-between gap-3 px-2.5 py-1.5 text-xs"
+                            >
+                              <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <span>{item.description}</span>
+                                {item.isNew && (
+                                  <span className="rounded bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                    Novo
+                                  </span>
+                                )}
+                              </span>
+                              <span className="inline-flex shrink-0 items-center gap-1">
+                                {item.keys.map((k, idx) => (
+                                  <React.Fragment key={k}>
+                                    {idx > 0 && (
+                                      <span className="text-[10px] text-slate-400">+</span>
+                                    )}
+                                    <kbd className="rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-800 dark:text-slate-100 shadow-2xs">
+                                      {k}
+                                    </kbd>
+                                  </React.Fragment>
+                                ))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setIsFullscreen((prev) => !prev)}
@@ -2426,15 +2572,25 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         )}
       </div>
 
-      {/* Technical Footer with Live Metrics */}
+      {/* Technical Footer with Live Metrics & Shortcut Hint */}
       <div
         className={`border-t border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-600 dark:text-slate-400 ${
           isFullscreen ? '' : 'rounded-b-xl'
         }`}
       >
-        <span>
-          Dica: Selecione texto para formatar, use Tab em tabelas/listas ou clique em imagens/vídeos para redimensionar.
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span>
+            Dica: Selecione texto para formatar, use Tab em tabelas/listas ou clique em mídias para redimensionar.
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowShortcutsHelp((prev) => !prev)}
+            className="inline-flex items-center gap-1 rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 cursor-pointer"
+          >
+            <HelpCircle className="w-3 h-3" />
+            <span>Ver Atalhos (Alt+H / F1)</span>
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className="rounded bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-slate-700 dark:text-slate-300">
             {textMetrics.words} palavras • {textMetrics.chars} caracteres (~{textMetrics.readMin} min leitura)
