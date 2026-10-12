@@ -159,14 +159,15 @@ O ciclo de compras no sistema é completamente integrado e segue o fluxo abaixo:
 
 ## 🧰 12. Manutenção Preventiva
 
-O módulo de manutenção preventiva controla rotinas planejadas para evitar falhas recorrentes.
+O módulo de manutenção preventiva controla rotinas planejadas para evitar falhas recorrentes e garantir a longevidade da infraestrutura.
 
-1. **Planos:** Cadastre planos com periodicidade, ativos envolvidos e responsáveis.
-2. **Checklists:** Configure itens de verificação para padronizar a execução.
-3. **Ordens:** Inicie, pause, conclua ou cancele ordens de manutenção.
-4. **Evidências:** Anexe fotos e registre materiais consumidos.
-5. **Notificações:** Acompanhe pendências e atualizações pelo dashboard e pelo módulo.
-6. **Kanban:** Quando necessário, sincronize a preventiva com projetos internos.
+1. **Planos:** Cadastre planos periódicos com definição de frequência (diária, semanal, mensal, semestral ou anual), ativos envolvidos e técnicos responsáveis.
+2. **Checklists Estruturados:** Configure itens de verificação padronizados com respostas obrigatórias (Conforme, Não Conforme, Observação).
+3. **Ordens de Serviço (OS):** Inicie, pause, conclua ou cancele ordens de manutenção com feedback visual e mensagens de alerta/erro exibidas inline diretamente nos modais de ação.
+4. **Requisição de Peças Integrada:** Solicite compras de componentes e peças de reposição diretamente do modal da OS preventiva. O sistema sincroniza o status da cotação/pedido em tempo real e permite cancelamento transparente se a peça não for mais necessária.
+5. **Evidências Fotográficas e Materiais:** Anexe fotos do antes e depois do serviço e registre materiais consumidos do estoque técnico.
+6. **Notificações Inteligentes:** Acompanhe pendências com deduplicação de alertas e filtros históricos.
+7. **Kanban Integrado:** Sincronize tarefas de manutenção diretamente com os quadros de projetos internos.
 
 ---
 
@@ -277,8 +278,72 @@ Em **Wiki & Manuais** (`/wiki`), colaboradores, gestores e administradores acess
    - **Formatação ao Selecionar Texto:** Selecione qualquer trecho de texto para abrir o menu flutuante rápido (*Bubble Menu*) ou use a barra superior fixa para aplicar **Negrito**, *Itálico*, <u>Sublinhado</u>, Tachado, Cores de Texto, Marca-Texto, tipos de fonte e tamanhos de fonte (`12px` a `36px`).
    - **Tabelas Interativas:** Clique no botão **Tabela** para escolher a grade visual (ex.: `3x3`, `4x4`) ou definir linhas e colunas personalizadas. Ao clicar dentro de uma tabela, uma barra contextual permite adicionar/remover linhas e colunas a qualquer momento.
    - **Imagens e Vídeos (até 50MB):** Arraste e solte arquivos (*Drag & Drop*), cole prints diretamente com `Ctrl+V` ou use o botão **Mídia**. Clique sobre qualquer imagem ou vídeo inserido para redimensionar pelo controle deslizante (`15%` a `100%`), arrastar a alça lateral `↔ Arrastar Tamanho` ou alinhar à esquerda/centro/direita.
-3. **Histórico de Revisões:**
-   - No modo de leitura do manual, clique em **Revisões** para inspecionar quem editou o artigo, a data/hora e o conteúdo anterior de cada versão.
+3. **Histórico de Revisões & Gestão:**
+   - No modo de leitura do manual, clique em **Histórico de Revisões** para inspecionar quem editou o artigo, a data/hora e o conteúdo anterior de cada versão.
+   - Administradores contam com a opção **Excluir Artigo** (com confirmação de segurança) para remoção definitiva de manuais obsoletos.
 4. **Permissões por Equipe (Gestores e Administradores):**
    - Na aba **Permissões da Equipe (RBAC)**, o Gestor do Departamento define visualmente quem do seu setor possui acesso **Sem Acesso**, **Leitura** ou **Escrita** em cada categoria do departamento e salva todas as alterações em lote (*Salvar Alterações em Lote*).
    - Administradores também contam com o botão global no topo da página para **Ativar/Desativar o Módulo Wiki** em todo o sistema.
+
+---
+
+## 🏆 19. Gamificação & Conquistas da Equipe Técnica
+
+O módulo de **Gamificação** foi desenvolvido para engajar e reconhecer o desempenho operacional dos técnicos e gestores de TI.
+
+### Como Acessar:
+- Pelo menu lateral em **Gamificação** ou na rota `/gamificacao`.
+- Pelo **Widget de Gamificação** no topo do cabeçalho (Header), que exibe seu nível e XP atual.
+
+### Recursos Disponíveis:
+1. **Perfil de Gamificação:** Exibe seu nível, total de pontos de experiência (XP), progresso até o próximo nível e histórico recente de atividades pontuadas.
+2. **Quadro de Medalhas & Conquistas:** Visualização de badges desbloqueadas e bloqueadas com critérios claros de obtenção (ex: *Resolvedor Ágil*, *Guardião da Preventiva*, *Mestre do Inventário*, *Herói das Emergências*).
+3. **Leaderboard / Ranking Semanal e Mensal:** Classificação transparente da equipe técnica baseada na pontuação acumulada.
+4. **Regras de Pontuação Automática:**
+   - Fechamento de chamado dentro do SLA de atendimento.
+   - Conclusão de checklist de manutenção preventiva sem pendências.
+   - Atendimento rápido de chamados de emergência.
+   - Realização de entregas/devoluções de ativos com validação de QR Code.
+
+> **Perfis autorizados:** `ADMIN`, `GERENTE_TI`, `GERENTE_INFRA` e `TECNICO`.
+
+---
+
+## 🏠 20. Integração IoT & Automação com Home Assistant
+
+Permite integrar a infraestrutura física inteligente da empresa diretamente aos ativos de TI cadastrados no sistema.
+
+### Como Configurar a Integração (Apenas Administradores):
+1. Acesse **Configurações > Home Assistant** (`/configuracoes`).
+2. Informe a **URL Base do Home Assistant** (ex: `http://192.168.1.50:8123` ou `https://meuhomeassistant.local`).
+3. Insira o **Token de Acesso de Longa Duração (LLAT)** gerado no perfil do Home Assistant.
+4. Clique em **Testar Conexão** para validar a comunicação em tempo real.
+5. Salve as alterações.
+
+### Operação no Painel Home Assistant (`/home-assistant`):
+1. **Visualização Geral:** O painel lista todas as entidades e sensores sincronizados (sensores de temperatura, umidade, tensão, consumo de energia, interruptores, relés, câmeras).
+2. **Vínculo com Ativos (E-Patrimônio):**
+   - Clique em **Vincular Ativo** na entidade desejada.
+   - Selecione o ativo correspondente no inventário (ex: vincular sensor de temperatura ao Rack 01 `EP-0015`).
+   - Uma vez vinculado, a telemetria ao vivo daquele sensor aparecerá tanto na ficha do ativo quanto nos relatórios.
+3. **Acionamento de Serviços e Comandos:**
+   - Execute ações diretamente pelo painel (ligar/desligar tomadas inteligentes, reiniciar equipamentos remotos ou ativar rotinas).
+4. **Organização por Categorias:** Crie categorias customizadas (ex: *Data Center*, *Nobreaks*, *Climatização*, *Segurança*) para facilitar o monitoramento.
+5. **Ocultar / Exibir Dispositivos:** Defina a visibilidade de entidades secundárias para manter o painel limpo e focado no essencial.
+
+---
+
+## 🚀 21. Atualização Automática do Sistema (Git & Docker Runner)
+
+O AssetTrack TI possui um mecanismo integrado para atualização segura sem necessidade de acesso manual via SSH pelo terminal.
+
+### Como Atualizar o Sistema (Apenas Administradores):
+1. Acesse o menu **Configurações** (`/configuracoes`).
+2. Na seção **Atualização do Sistema**, verifique a versão atual instalada (`v2.1.0`), commit hash e branch ativa.
+3. Clique em **Verificar Atualizações** para checar se existem novas versões no repositório GitHub.
+4. Caso haja novos commits, o sistema listará o resumo detalhado das melhorias e correções.
+5. Clique em **Atualizar Agora**:
+   - Um modal interativo com terminal em tempo real será aberto.
+   - O processo é executado por um script isolado (`docker_self_update.sh`) que realiza `git pull`, compila o backend Go e o frontend React e recria os containers Docker com segurança.
+   - Se os containers forem reiniciados durante a compilação, o runner mantém a integridade do processo e salva o histórico em `.system_update.log`.
+6. Após a conclusão bem-sucedida, o sistema detecta o retorno da API pelo endpoint `/health` e sugere a recarga da página para aplicar a nova versão.

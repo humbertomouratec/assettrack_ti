@@ -371,6 +371,9 @@ func (c *mockSQLConn) ExecContext(_ context.Context, query string, _ []driver.Na
 		currentMockBulkState.upsertedCount++
 		return driver.RowsAffected(1), nil
 	}
+	if strings.Contains(query, "DELETE FROM wiki_articles") {
+		return driver.RowsAffected(1), nil
+	}
 	return nil, errors.New("unexpected exec in mockSQLConn: " + query)
 }
 
@@ -486,5 +489,45 @@ func TestBulkUpdatePermissions_RBACAndAntiIDOR(t *testing.T) {
 	}
 	if bulkResp.UpdatedCount != 2 || bulkResp.DepartmentID != 10 {
 		t.Errorf("expected UpdatedCount=2 and DepartmentID=10, got %+v", bulkResp)
+	}
+}
+
+func TestDeleteArticle_RBAC(t *testing.T) {
+	// 1. Non-admin user attempting DELETE -> 403 Forbidden
+	db := openMockWikiDB(t, mockBulkState{})
+	repo := NewWikiRepository(db)
+	handler := NewWikiHandler(repo)
+
+	reqNonAdmin := httptest.NewRequest(http.MethodDelete, "/api/v1/wiki/articles/42", nil)
+	reqNonAdmin.Header.Set("X-User-ID", "15")
+	reqNonAdmin.Header.Set("X-User-Role", "tecnico")
+	reqNonAdmin.Header.Set("X-User-Active", "true")
+	recNonAdmin := httptest.NewRecorder()
+
+	handler.DeleteArticle(recNonAdmin, reqNonAdmin)
+
+	if recNonAdmin.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when non-admin attempts to delete article, got %d", recNonAdmin.Code)
+	}
+
+	// 2. Admin attempting DELETE on mock DB where DELETE returns rows affected = 1
+	reqAdmin := httptest.NewRequest(http.MethodDelete, "/api/v1/wiki/articles/42", nil)
+	reqAdmin.Header.Set("X-User-ID", "1")
+	reqAdmin.Header.Set("X-User-Role", "admin")
+	reqAdmin.Header.Set("X-User-Active", "true")
+	recAdmin := httptest.NewRecorder()
+
+	handler.DeleteArticle(recAdmin, reqAdmin)
+
+	if recAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when admin deletes article, got %d: %s", recAdmin.Code, recAdmin.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(recAdmin.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["message"] != "Artigo excluído com sucesso" {
+		t.Errorf("expected success message, got %v", resp["message"])
 	}
 }

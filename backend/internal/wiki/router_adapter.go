@@ -39,6 +39,7 @@ func RegisterStdMuxRoutes(mux *http.ServeMux, db *sql.DB, uploadDir ...string) {
 	apiMux.HandleFunc("POST /api/v1/wiki/articles", handler.CreateArticle)
 	apiMux.HandleFunc("GET /api/v1/wiki/articles/{id}", handler.GetArticle)
 	apiMux.HandleFunc("PUT /api/v1/wiki/articles/{id}", handler.UpdateArticle)
+	apiMux.HandleFunc("DELETE /api/v1/wiki/articles/{id}", handler.DeleteArticle)
 	apiMux.HandleFunc("GET /api/v1/wiki/articles/{id}/revisions", handler.ListArticleRevisions)
 
 	// Department Manager RBAC Matrix & Bulk Update
@@ -88,6 +89,7 @@ func RegisterGinWikiRoutes(apiV1 *gin.RouterGroup, db *sql.DB, uploadDir ...stri
 	wikiGroup.POST("/articles", wrapStdHandler(handler.CreateArticle))
 	wikiGroup.GET("/articles/:id", wrapStdHandlerWithParams(handler.GetArticle, "id"))
 	wikiGroup.PUT("/articles/:id", wrapStdHandlerWithParams(handler.UpdateArticle, "id"))
+	wikiGroup.DELETE("/articles/:id", wrapStdHandlerWithParams(handler.DeleteArticle, "id"))
 	wikiGroup.GET("/articles/:id/revisions", wrapStdHandlerWithParams(handler.ListArticleRevisions, "id"))
 
 	// Department Manager RBAC Matrix & Bulk Update

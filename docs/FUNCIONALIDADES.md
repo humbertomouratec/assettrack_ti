@@ -205,9 +205,36 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 
 ---
 
+## 🏆 Gamificação & Central de Conquistas (Técnicos & Gestores)
+
+Módulo moderno de engajamento e reconhecimento da equipe técnica e de infraestrutura.
+
+- **Sistema de Pontuação e XP:** Atribuição dinâmica de pontos baseada no cumprimento de metas operacionais (fechamento de chamados no SLA, execução de manutenções preventivas, resolução de alertas emergenciais e movimentações de ativos).
+- **Painel de Conquistas & Medalhas:** Badges categorizadas por nível de raridade (*Comum*, *Raro*, *Épico*, *Lendário*) desbloqueadas automaticamente conforme o colaborador atinge marcos operacionais.
+- **Leaderboard / Ranking da Equipe:** Tabela de classificação em tempo real exibindo posição, pontuação total, nível e insígnias dos técnicos.
+- **Widget no Header:** Indicador compacto e interativo na barra superior exibindo o nível atual, barra de progresso de XP para o próximo nível e atalho direto para a central de gamificação.
+- **Acesso Restrito e Seguro:** Módulo e endpoints protegidos exclusivamente para os perfis `ADMIN`, `GERENTE_TI`, `GERENTE_INFRA` e `TECNICO`.
+
+---
+
+## 🏠 Integração IoT & Automação com Home Assistant
+
+Módulo avançado de integração com o ecossistema **Home Assistant**, permitindo convergência total entre o gerenciamento de ativos de TI e o monitoramento físico de infraestrutura/datacenter.
+
+- **Painel de Controle IoT (`/home-assistant`):** Visão centralizada de dispositivos e entidades inteligentes sincronizadas (sensores de temperatura/umidade, nobreaks, switches inteligentes, iluminação, travas e câmeras).
+- **Vínculo Direto com E-Patrimônio:** Associação direta entre entidades do Home Assistant e ativos do inventário do AssetTrack TI (ex: vincular o sensor `sensor.rack_server_temperature` ao ativo `EP-0042`).
+- **Telemetria em Tempo Real:** Consulta e exibição da telemetria de sensores diretamente na ficha do ativo e no painel de monitoramento.
+- **Acionamento de Serviços e Automações:** Disparo seguro de comandos para o Home Assistant (ligar/desligar tomadas inteligentes, reiniciar equipamentos, ativar climatização de emergência).
+- **Categorização & Agrupamento Customizável:** Criação e ordenação de categorias personalizadas para organizar dispositivos por setor ou tipo de infraestrutura.
+- **Controle de Visibilidade:** Opção para exibir ou ocultar entidades específicas na visão operacional sem precisar desconfigurá-las.
+- **Diagnóstico & Teste de Conexão:** Teste instantâneo de conectividade e validação do token de longa duração (LLAT) no painel de configurações administrativas.
+- **Acesso Restrito:** Restrito aos perfis `ADMIN`, `GERENTE_TI`, `GERENTE_INFRA` e `TECNICO`.
+
+---
+
 ## 🎛️ Controle de Módulos e Acessos (RBAC Dinâmico)
 
-- **Feature Toggles:** Ativação ou desativação em tempo real dos módulos de Compras e Manutenção Preventiva.
+- **Feature Toggles:** Ativação ou desativação em tempo real dos módulos de Compras, Manutenção Preventiva, Gamificação e Home Assistant.
 - **Matriz de Permissões de Menu:** Painel visual que permite ao administrador customizar quais perfis de acesso visualizam cada seção de menu no sistema.
 - **Trava de Segurança:** Acesso irrestrito do Administrador é mantido de forma nativa para evitar bloqueios acidentais.
 
@@ -218,7 +245,7 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 - **Cadastro de Webhooks:** Administradores configuram integrações externas com nome, URL, eventos e status.
 - **Teste de Envio:** Webhooks podem ser testados pela interface administrativa.
 - **Logs de Entrega:** Histórico de execuções, respostas e falhas por webhook.
-- **Eventos Operacionais:** Estrutura pronta para integração com chamados, ativos, compras e demais módulos.
+- **Eventos Operacionais:** Estrutura pronta para integração com chamados, ativos, compras, alertas e automações.
 
 ---
 
@@ -232,14 +259,15 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 
 ---
 
-## 🚀 Atualização do Sistema (Git & Docker)
+## 🚀 Atualização do Sistema (Git & Docker Runner)
 
 - **Painel de Atualização (Admin Only):** Exclusivo para usuários com papel `admin` na tela de Configurações (`/configuracoes`).
-- **Inspeção de Versão:** Consulta imediata da branch ativa, commit hash e data do último commit local.
+- **Inspeção de Versão:** Consulta imediata da versão atual (`v2.1.0`), branch ativa, commit hash e data do último commit local.
 - **Checagem Remota (`git fetch`):** Verificação de novidades no repositório upstream com listagem detalhada de novos commits (autor, data e mensagem).
-- **Deploy com Rebuild Integrado:** Disparo assíncrono de `git pull` e recompilação/recriação dos containers da aplicação (`update_docker.sh`).
-- **Terminal de Logs em Tempo Real:** Modal interativo que exibe a saída do terminal linha a linha durante o processo.
-- **Reconexão Automática:** Monitoramento do endpoint `/health` pós-restart com sugestão de recarga automática da página.
+- **Runner Desacoplado (`docker_self_update.sh`):** Execução isolada em background para garantir que o processo de atualização e rebuild não seja abortado caso o container backend seja reiniciado durante a compilação.
+- **Persistência de Estado e Logs:** Registro do status e saída em `.system_update.log` e `.system_update.status`, consumido em tempo real pelo modal do frontend.
+- **Portas Parametrizadas & Anti-Conflito:** Suporte a portas configuráveis via `.env` (`API_PORT`, `WEB_PORT`, `DB_PORT`, `REDIS_PORT`) com limpeza e auto-remoção preventiva de containers legados conflitantes.
+- **Reconexão Automática com Health Check:** Monitoramento automático de recuperação do endpoint `/health` com botão de reload do painel.
 - Documentação detalhada em [`docs/ATUALIZACAO_SISTEMA_GIT.md`](./ATUALIZACAO_SISTEMA_GIT.md).
 
 ---
@@ -258,7 +286,8 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 - **Backend:** Go 1.21+ (Gin Web Framework + GORM).
 - **Frontend:** React 18+ (Vite, TypeScript, Zustand, Tailwind CSS v4, Lucide).
 - **Banco de Dados:** PostgreSQL (Dockerizado).
-- **Infra:** Docker & Docker Compose.
+- **Cache & Filas:** Redis (Dockerizado).
+- **Infra:** Docker & Docker Compose com scripts de bootstrap e atualização automatizados.
 
 ---
 
@@ -300,6 +329,8 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 | `/login` | Login tradicional e configuração simples do endereço da aplicação |
 | `/manual` | Manual visual online |
 | `/monitoramento` | Sala de monitoramento para TV |
+| `/gamificacao` | Central de conquistas, badges e ranking técnico (Leaderboard) |
+| `/home-assistant` | Monitoramento IoT, telemetria de ativos e automações |
 | `/users` | Gestão de usuários |
 | `/assets` | Ativos, inventário, referências, filtros, importação/exportação e QR |
 | `/badge` | Crachá digital e QR do usuário |
@@ -307,7 +338,7 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 | `/manutencoes` | Manutenção corretiva |
 | `/emprestimos` | Solicitações, empréstimos, entregas e devoluções |
 | `/setores` | Setores/departamentos |
-| `/manutencao-preventiva` | Planos e ordens de manutenção preventiva |
+| `/manutencao-preventiva` | Planos, ordens, checklists e requisição de peças na preventiva |
 | `/kanban` | Projetos internos e tarefas |
 | `/alertas` | Alertas emergenciais e comunicados oficiais |
 | `/compras` | Compras, cotações, pedidos, estoque, contratos e pesquisas |
@@ -317,7 +348,7 @@ Módulo de assistente virtual cognitivo integrado nativamente ao ERP, operando v
 | `/webhooks` | Integrações via webhook |
 | `/backups` | Backup e restore |
 | `/profile` | Perfil, avatar, senha e portal RH pessoal |
-| `/configuracoes` | Configurações, módulos e permissões |
+| `/configuracoes` | Configurações, módulos, Home Assistant e permissões |
 | `/logs-email` | Logs administrativos de e-mail |
 
 ## Apresentação pública integrada

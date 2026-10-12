@@ -23,11 +23,14 @@ O painel foi projetado para uso em uma TV: abra a rota, clique em **Tela cheia**
 - **Alertas Emergenciais:** Acionamento rápido, transmissão em tempo real, som de alerta, histórico, ciência e atendimento.
 - **Comunicados:** Avisos oficiais com texto, imagens, vídeos, links, vigência e exibição no dashboard.
 - **Manutenção Corretiva:** Solicitações de reparo, aceite, rejeição, conclusão e confirmação de recebimento.
-- **Manutenção Preventiva:** Planos, checklists, ordens, materiais, fotos, notificações e integração com Kanban.
+- **Manutenção Preventiva:** Planos periódicos, checklists estruturados, requisição de peças com sincronização em tempo real e integração com Kanban.
+- **Gamificação & Conquistas:** Sistema de pontuação operacional, níveis (XP), insígnias por raridade e ranking técnico semanal/mensal (Leaderboard).
+- **Home Assistant IoT:** Integração direta com dispositivos inteligentes, vinculação de entidades com E-Patrimônio, telemetria em tempo real e acionamento de serviços.
 - **Compras:** Solicitações, cotações, pedidos, recebimento, estoque, contratos, centros de custo, produtos, fornecedores e pesquisas.
 - **Kanban:** Projetos, colunas, cards, responsáveis, anexos, comentários, favoritos, notificações e vínculo com compras/estoque/preventiva.
 - **RH:** Termos de responsabilidade, assinatura, anexos, status da equipe, comunicados, portal do colaborador e seleção para monitoramento.
 - **Sala de Monitoramento:** Painel TV com chamados, manutenções, solicitações, Kanban, emergências e status RH selecionado.
+- **Atualização Automática:** Checagem e aplicação de atualizações Git via painel administrativo com runner desacoplado em background (`docker_self_update.sh`).
 - **Android APK:** Download do APK anexado manualmente, QR de instalação, verificação de versão e configuração por endereço único da aplicação.
 - **PWA Mobile:** A aplicação web pode ser instalada pelo navegador do smartphone quando acessada pelo endereço da rede, como `http://192.168.x.x:8000`.
 - **Administração:** Configurações globais, RBAC de menus, webhooks, backups, restore, logs de e-mail e assistente de IA.

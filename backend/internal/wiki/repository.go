@@ -737,6 +737,36 @@ func (r *WikiRepository) UpdateArticleWithRevision(
 	return &current, nil
 }
 
+// DeleteArticle deletes a wiki article.
+// Only global administrators ('admin') are authorized to delete articles.
+func (r *WikiRepository) DeleteArticle(ctx context.Context, user *AuthenticatedUser, articleID int64) error {
+	if user == nil || !user.IsActive || user.ID <= 0 {
+		return ErrUnauthorized
+	}
+	if !user.IsAdmin() {
+		return ErrForbidden
+	}
+	if articleID <= 0 {
+		return ErrInvalidPayload
+	}
+
+	const deleteQuery = `DELETE FROM wiki_articles WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, deleteQuery, articleID)
+	if err != nil {
+		return fmt.Errorf("failed to delete wiki article %d: %w", articleID, err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to inspect rows affected for article %d deletion: %w", articleID, err)
+	}
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 // ListArticleRevisions returns the chronological revision history of an article for authorized readers.
 func (r *WikiRepository) ListArticleRevisions(ctx context.Context, user *AuthenticatedUser, articleID int64) ([]WikiArticleRevision, error) {
 	// Ensure caller has at least read access to the article before exposing revision history.

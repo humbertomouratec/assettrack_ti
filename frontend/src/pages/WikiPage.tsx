@@ -17,6 +17,7 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   User as UserIcon,
   X,
 } from 'lucide-react';
@@ -119,6 +120,10 @@ export const WikiPage: React.FC = () => {
   const [revisions, setRevisions] = useState<WikiArticleRevision[]>([]);
   const [loadingRevisions, setLoadingRevisions] = useState<boolean>(false);
   const [previewRevision, setPreviewRevision] = useState<WikiArticleRevision | null>(null);
+
+  // Delete Article state (Admin only)
+  const [articleToDelete, setArticleToDelete] = useState<WikiArticle | null>(null);
+  const [deletingArticle, setDeletingArticle] = useState<boolean>(false);
 
   // Manageable Departments for RBAC Matrix
   const [manageableDepts, setManageableDepts] = useState<ManageableDepartment[]>([]);
@@ -349,6 +354,28 @@ export const WikiPage: React.FC = () => {
       setRevisions([]);
     } finally {
       setLoadingRevisions(false);
+    }
+  };
+
+  const handleDeleteArticle = async () => {
+    if (!isAdmin || !articleToDelete) return;
+    setDeletingArticle(true);
+    setErrorBanner(null);
+    try {
+      await apiClient.delete(`/wiki/articles/${articleToDelete.id}`);
+      setSuccessBanner(`Artigo "${articleToDelete.title}" excluído com sucesso!`);
+      const deletedId = articleToDelete.id;
+      setArticleToDelete(null);
+      if (selectedArticle?.id === deletedId) {
+        setSelectedArticle(null);
+      }
+      await loadWikiData();
+    } catch (err: any) {
+      setErrorBanner(
+        err?.response?.data?.error || 'Erro ao excluir artigo da Base de Conhecimento.'
+      );
+    } finally {
+      setDeletingArticle(false);
     }
   };
 
@@ -874,6 +901,17 @@ export const WikiPage: React.FC = () => {
                       <Edit3 className="h-4 w-4" />
                       Editar Artigo
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setArticleToDelete(selectedArticle)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+                        title="Excluir este artigo da Base de Conhecimento"
+                      >
+                        <Trash2 className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                        Excluir Artigo
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1072,6 +1110,60 @@ export const WikiPage: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirm Delete Article (Admin only) */}
+      {articleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-xl border border-rose-200 bg-white p-6 shadow-xl dark:border-rose-900/60 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/60">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Confirmar Exclusão de Artigo
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Esta ação é irreversível e removerá o manual e suas revisões.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">
+                {articleToDelete.title}
+              </p>
+              <p className="mt-1 text-slate-500">
+                Categoria: {articleToDelete.category_name || `#${articleToDelete.category_id}`}
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setArticleToDelete(null)}
+                disabled={deletingArticle}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteArticle}
+                disabled={deletingArticle}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer disabled:opacity-50"
+              >
+                {deletingArticle ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Excluir Definitivamente
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -41,6 +41,8 @@ O Nginx do container web encaminha essa rota internamente para a API Go. O acess
 | Backup | `/backups` | Geração, download, exclusão, restore e status. |
 | Perfil | `/profile` | Dados pessoais, avatar, senha e portal RH pessoal. |
 | Dashboard | `/dashboard` | Indicadores consolidados. |
+| Gamificação | `/gamification` | Perfil de gamificação, pontuação, XP, medalhas e ranking técnico. |
+| Home Assistant | `/home-assistant`, `/admin/home-assistant` | Dispositivos IoT, telemetria de ativos, controle de serviços e categorias. |
 | Administração | `/admin/settings`, `/admin/email-logs`, `/admin/system` | Configurações globais, permissões, logs de e-mail e atualização via Git. |
 | IA | `/chat` | Assistente conversacional conectado aos dados da aplicação. |
 
@@ -342,7 +344,143 @@ Dispara de forma assíncrona o processo de atualização (`git pull` e reconstru
 ### GET `/admin/system/updates/logs`
 Retorna o status atual (`idle`, `checking`, `updating`, `completed`, `error`) e o buffer circular de linhas de log do terminal em tempo real.
 
-Para detalhes completos de payload e arquitetura, consulte [`docs/ATUALIZACAO_SISTEMA_GIT.md`](./ATUALIZACAO_SISTEMA_GIT.md).
+---
+
+## 🏆 Gamificação (`/gamification`)
+
+Endpoints protegidos para os perfis autorizados (`ADMIN`, `GERENTE_TI`, `GERENTE_INFRA`, `TECNICO`).
+
+### GET `/gamification/me`
+Retorna o perfil completo de gamificação do usuário autenticado.
+
+**Response (200 OK):**
+```json
+{
+  "user_id": 4,
+  "nome": "Carlos Silva",
+  "cargo": "Técnico de Suporte",
+  "pontos": 1250,
+  "nivel": 5,
+  "proximo_nivel_pontos": 1500,
+  "posicao_ranking": 2,
+  "badges": [
+    {
+      "id": "fast_resolver",
+      "nome": "Resolvedor Ágil",
+      "descricao": "Resolveu 50 chamados dentro do SLA",
+      "raridade": "raro",
+      "desbloqueado_em": "2026-09-20T14:30:00Z"
+    }
+  ]
+}
+```
+
+### GET `/gamification/leaderboard`
+Retorna o ranking geral da equipe técnica ordenado por pontuação decrescente.
+
+**Response (200 OK):**
+```json
+[
+  {
+    "posicao": 1,
+    "user_id": 2,
+    "nome": "Ana Souza",
+    "avatar": "/uploads/avatars/user2.png",
+    "pontos": 1820,
+    "nivel": 7,
+    "badges_count": 12
+  }
+]
+```
+
+### GET `/gamification/user/:id`
+Retorna o perfil público de gamificação de um colaborador específico.
+
+---
+
+## 🏠 Home Assistant IoT & Automação (`/home-assistant`)
+
+Endpoints de monitoramento e controle IoT. Requerem perfil técnico ou administrativo (`ADMIN`, `GERENTE_TI`, `GERENTE_INFRA`, `TECNICO`).
+
+### GET `/home-assistant/overview`
+Retorna a lista consolidada de dispositivos e entidades descobertas no Home Assistant com seus estados e atributos atuais.
+
+**Response (200 OK):**
+```json
+{
+  "connected": true,
+  "entities": [
+    {
+      "entity_id": "sensor.datacenter_temperatura",
+      "state": "21.4",
+      "attributes": {
+        "unit_of_measurement": "°C",
+        "friendly_name": "Temperatura Rack Principal"
+      },
+      "last_updated": "2026-10-07T21:30:00Z",
+      "asset_id": 15,
+      "asset_patrimonio": "EP-0015",
+      "visible": true,
+      "category_id": 1
+    }
+  ]
+}
+```
+
+### POST `/home-assistant/service`
+Dispara um comando/serviço no Home Assistant (ex: alternar relé, ligar/desligar tomada inteligente).
+
+**Payload:**
+```json
+{
+  "domain": "switch",
+  "service": "turn_on",
+  "target": {
+    "entity_id": "switch.tomada_nobreak_rack"
+  },
+  "service_data": {}
+}
+```
+
+### GET `/home-assistant/asset/:id/telemetry`
+Retorna os dados de telemetria e sensores vinculados a um ativo patrimonial específico.
+
+### GET `/home-assistant/bindings`
+Lista todos os vínculos ativos entre entidades Home Assistant e IDs de ativos de TI.
+
+### POST `/home-assistant/bindings`
+Cria ou atualiza um vínculo entre uma entidade IoT e um ativo do inventário.
+
+**Payload:**
+```json
+{
+  "entity_id": "sensor.datacenter_temperatura",
+  "asset_id": 15
+}
+```
+
+### DELETE `/home-assistant/bindings/:id`
+Remove o vínculo do ativo com a entidade IoT.
+
+### PATCH `/home-assistant/visibility`
+Define se uma entidade específica deve ser exibida ou ocultada no painel operacional.
+
+**Payload:**
+```json
+{
+  "entity_id": "sensor.sensor_secundario",
+  "visible": false
+}
+```
+
+### GET `/home-assistant/categories`
+Lista as categorias customizadas de dispositivos IoT.
+
+### POST `/home-assistant/categories`
+Cria uma nova categoria para organização de dispositivos.
+
+### POST `/admin/home-assistant/test`
+*(Exclusivo Admin)* Testa a conectividade com a instância do Home Assistant usando as credenciais configuradas em `SystemSettings`.
 
 ---
 
@@ -393,6 +531,8 @@ As rotas abaixo representam as páginas atuais da SPA em React. Elas são render
 |------|--------|
 | `/` | Dashboard principal |
 | `/login` | Login |
+| `/gamificacao` | Central de Gamificação, Conquistas e Leaderboard |
+| `/home-assistant` | Painel IoT Home Assistant e Telemetria de Infraestrutura |
 | `/users` | Usuários |
 | `/assets` | Ativos & Inventário, incluindo filtros e relatórios |
 | `/badge` | Meu crachá / QR |
@@ -411,7 +551,7 @@ As rotas abaixo representam as páginas atuais da SPA em React. Elas são render
 | `/webhooks` | Webhooks |
 | `/backups` | Backup & Restore |
 | `/profile` | Perfil |
-| `/configuracoes` | Configurações administrativas |
+| `/configuracoes` | Configurações administrativas e atualização |
 | `/logs-email` | Logs de e-mail |
 
 ## Observações importantes da arquitetura atual
@@ -435,3 +575,4 @@ As rotas abaixo representam as páginas atuais da SPA em React. Elas são render
 - **401 Unauthorized**: Falha na autenticação.
 - **403 Forbidden**: Sem permissão.
 - **404 Not Found**: Recurso não encontrado.
+

@@ -190,6 +190,42 @@ func (h *WikiHandler) UpdateArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
+// DeleteArticle handles DELETE /api/v1/wiki/articles/{id}.
+// Only global administrators ('admin') are authorized to delete articles.
+func (h *WikiHandler) DeleteArticle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSONError(w, http.StatusMethodNotAllowed, "Método não permitido")
+		return
+	}
+
+	user, err := ExtractAuthenticatedUser(r)
+	if err != nil {
+		h.handleDomainError(w, err)
+		return
+	}
+
+	if !user.IsAdmin() {
+		writeJSONError(w, http.StatusForbidden, "Apenas administradores globais podem excluir artigos da Wiki")
+		return
+	}
+
+	articleID, err := extractPathInt64(r, "id", "articles")
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "ID do artigo inválido")
+		return
+	}
+
+	if err := h.repo.DeleteArticle(r.Context(), user, articleID); err != nil {
+		h.handleDomainError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":    "Artigo excluído com sucesso",
+		"article_id": articleID,
+	})
+}
+
 // ListArticleRevisions handles GET /api/v1/wiki/articles/{id}/revisions.
 func (h *WikiHandler) ListArticleRevisions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
