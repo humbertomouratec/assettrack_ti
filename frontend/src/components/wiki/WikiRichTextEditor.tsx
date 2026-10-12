@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   AlignCenter,
@@ -6,9 +6,12 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Check,
   CheckCircle2,
   Code2,
   Columns,
+  Expand,
+  ExternalLink,
   Eye,
   FileCode,
   Film,
@@ -31,14 +34,19 @@ import {
   Redo2,
   RemoveFormatting,
   Rows,
+  SeparatorHorizontal,
+  Shrink,
   Strikethrough,
   Table as TableIcon,
   Trash2,
   Type,
   Underline as UnderlineIcon,
   Undo2,
+  Unlink,
   UploadCloud,
+  X,
 } from 'lucide-react';
+import { toApiFileUrl } from '../../api/client';
 
 export interface WikiUploadResponse {
   url: string;
@@ -184,14 +192,31 @@ function escapeHtmlAttribute(raw: string): string {
 }
 
 function buildMediaHtmlSnippet(url: string, fileName: string, kind: 'image' | 'video'): string {
-  const safeUrl = escapeHtmlAttribute(url);
+  const resolvedUrl = toApiFileUrl(url) || url;
+  const safeUrl = escapeHtmlAttribute(resolvedUrl);
   const safeName = escapeHtmlAttribute(fileName);
 
   if (kind === 'video') {
-    return `\n<figure class="wiki-media-figure my-4" contenteditable="false"><video controls preload="metadata" src="${safeUrl}" style="width: 100%; max-width: 100%; height: auto;" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-950"></video><figcaption class="text-xs font-mono text-slate-500 mt-1" contenteditable="true">${safeName}</figcaption></figure><p><br/></p>\n`;
+    return `\n<figure class="wiki-media-figure my-4"><video controls preload="metadata" src="${safeUrl}" style="width: 100%; max-width: 100%; height: auto;" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-950"></video><figcaption class="text-xs font-mono text-slate-500 mt-1">${safeName}</figcaption></figure><p><br/></p>\n`;
   }
 
   return `\n<figure class="wiki-media-figure my-4"><img src="${safeUrl}" alt="${safeName}" loading="lazy" style="width: 75%; max-width: 100%; height: auto;" class="rounded-lg border border-slate-300 dark:border-slate-700" /><figcaption class="text-xs font-mono text-slate-500 mt-1">${safeName}</figcaption></figure><p><br/></p>\n`;
+}
+
+/**
+ * Strips any temporary editor UI artifacts (such as `data-wiki-selected="true"` or leftover
+ * inline `outline` styles) and unsafe script/event attributes from the HTML string before emitting
+ * it to the parent form/database.
+ */
+export function sanitizeEditorOutputHtml(rawHtml: string): string {
+  if (!rawHtml) return '';
+  return rawHtml
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<(iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s*data-wiki-selected="[^"]*"/gi, '')
+    .replace(/outline:\s*2px\s+solid\s+#2563eb;?\s*/gi, '')
+    .replace(/outline-offset:\s*2px;?\s*/gi, '');
 }
 
 export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
@@ -205,11 +230,13 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
 }) => {
   const editorHeadingId = useId();
   const fileInputId = useId();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
 
   const [viewMode, setViewMode] = useState<'visual' | 'source'>('visual');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [activeUploads, setActiveUploads] = useState<ActiveMediaUpload[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -239,7 +266,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     selectedText: string;
   }>({ visible: false, top: 0, left: 0, selectedText: '' });
 
-  // Popover menus (Table Grid Picker, Color Picker)
+  // Popover menus (Table Grid Picker, Color Picker, Link Popover)
   const [showTablePicker, setShowTablePicker] = useState<boolean>(false);
   const [hoverTableGrid, setHoverTableGrid] = useState<{ rows: number; cols: number }>({
     rows: 3,
@@ -249,6 +276,12 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
   const [customTableCols, setCustomTableCols] = useState<number>(3);
   const [tableWithHeader, setTableWithHeader] = useState<boolean>(true);
   const [showColorMenu, setShowColorMenu] = useState<boolean>(false);
+
+  // Inline Link Popover State (replaces blocking window.prompt)
+  const [showLinkPopover, setShowLinkPopover] = useState<boolean>(false);
+  const [linkUrlInput, setLinkUrlInput] = useState<string>('https://');
+  const [linkTextInput, setLinkTextInput] = useState<string>('');
+  const [activeAnchorEl, setActiveAnchorEl] = useState<HTMLAnchorElement | null>(null);
 
   // Active Table cell detection (for contextual table row/column controls)
   const [activeTableCell, setActiveTableCell] = useState<HTMLTableCellElement | null>(null);
@@ -267,18 +300,47 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     containerWidth: 1,
   });
 
+  // Word & character counter for technical footer
+  const textMetrics = useMemo(() => {
+    const plain = value
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const chars = plain.length;
+    const words = chars === 0 ? 0 : plain.split(/\s+/).length;
+    const readMin = Math.max(1, Math.ceil(words / 200));
+    return { words, chars, readMin };
+  }, [value]);
+
   const emitHtmlChange = useCallback(() => {
     const node = editableRef.current;
     if (!node) return;
-    onChange(node.innerHTML);
+    onChange(sanitizeEditorOutputHtml(node.innerHTML));
   }, [onChange]);
 
   const syncVisualEditorIfNeeded = useCallback((nextHtml: string) => {
     const node = editableRef.current;
-    if (node && node.innerHTML !== nextHtml) {
-      node.innerHTML = nextHtml;
+    if (!node) return;
+    const cleaned = sanitizeEditorOutputHtml(nextHtml);
+    if (sanitizeEditorOutputHtml(node.innerHTML) !== cleaned) {
+      node.innerHTML = cleaned;
     }
   }, []);
+
+  // Sync external `value` changes (e.g. switching between articles or starting new article)
+  useEffect(() => {
+    const node = editableRef.current;
+    if (!node || viewMode !== 'visual') return;
+    if (document.activeElement !== node) {
+      const cleaned = sanitizeEditorOutputHtml(value);
+      if (sanitizeEditorOutputHtml(node.innerHTML) !== cleaned) {
+        node.innerHTML = cleaned;
+      }
+    }
+  }, [value, viewMode]);
 
   // Save current user selection inside the editor so toolbar clicks never lose selection
   const saveCurrentSelection = useCallback(() => {
@@ -311,20 +373,24 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
       // Ignore queryCommandState errors
     }
 
-    // Check if cursor is inside a table cell
+    // Check if cursor is inside a table cell or an anchor link
     let curr: Node | null = range.startContainer;
     let foundCell: HTMLTableCellElement | null = null;
+    let foundAnchor: HTMLAnchorElement | null = null;
     while (curr && curr !== editor) {
       if (curr.nodeType === Node.ELEMENT_NODE) {
         const tag = (curr as HTMLElement).tagName;
-        if (tag === 'TD' || tag === 'TH') {
+        if (!foundCell && (tag === 'TD' || tag === 'TH')) {
           foundCell = curr as HTMLTableCellElement;
-          break;
+        }
+        if (!foundAnchor && tag === 'A') {
+          foundAnchor = curr as HTMLAnchorElement;
         }
       }
       curr = curr.parentNode;
     }
     setActiveTableCell(foundCell);
+    setActiveAnchorEl(foundAnchor);
 
     // Inspect computed font size / family at cursor
     const anchorEl =
@@ -334,7 +400,10 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     if (anchorEl && editor.contains(anchorEl)) {
       const computed = window.getComputedStyle(anchorEl);
       if (computed.fontSize) {
-        setSelectedFontSize(computed.fontSize);
+        const matchedSize = FONT_SIZES.find((s) => s.value === computed.fontSize);
+        if (matchedSize) {
+          setSelectedFontSize(matchedSize.value);
+        }
       }
     }
 
@@ -343,7 +412,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     if (!range.collapsed && selectedText.length > 0) {
       const rect = range.getBoundingClientRect();
       const editorRect = editor.getBoundingClientRect();
-      const top = Math.max(8, rect.top - editorRect.top - 48);
+      const top = Math.max(8, rect.top - editorRect.top + editor.scrollTop - 48);
       const left = Math.min(
         Math.max(12, rect.left - editorRect.left + rect.width / 2 - 160),
         Math.max(12, editorRect.width - 340)
@@ -387,14 +456,43 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     return fallbackRange;
   }, []);
 
+  // Close popovers on outside click or Escape key
+  useEffect(() => {
+    const handleOutsideMouseDown = (event: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(event.target as Node)) {
+        setShowColorMenu(false);
+        setShowTablePicker(false);
+        setShowLinkPopover(false);
+        setBubbleMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      }
+    };
+
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowColorMenu(false);
+        setShowTablePicker(false);
+        setShowLinkPopover(false);
+        setBubbleMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        if (selectedMediaEl) {
+          selectedMediaEl.removeAttribute('data-wiki-selected');
+          setSelectedMediaEl(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideMouseDown);
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideMouseDown);
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [selectedMediaEl]);
+
   // Execute standard rich-text command on the active selection
   const runCommand = useCallback(
     (command: string, commandValue?: string) => {
-      if (disabled) return;
-
-      if (viewMode === 'source') {
-        return;
-      }
+      if (disabled || viewMode === 'source') return;
 
       restoreSavedSelection();
       document.execCommand('styleWithCSS', false, 'true');
@@ -405,49 +503,96 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     [disabled, emitHtmlChange, restoreSavedSelection, saveCurrentSelection, viewMode]
   );
 
-  // Apply exact CSS style (such as font-size or font-family) to the selected text Range
+  // Apply exact CSS style (font-size, font-family, color, highlight) safely across single or multi-block selections
   const applyInlineStyleToSelection = useCallback(
     (styles: Partial<CSSStyleDeclaration>) => {
       if (disabled || viewMode !== 'visual') return;
 
+      const editor = editableRef.current;
       const range = restoreSavedSelection();
-      if (!range) return;
+      if (!editor || !range) return;
 
       const sel = window.getSelection();
       if (!sel) return;
 
       if (range.collapsed) {
-        // If no text is selected, insert a styled span with zero-width space or sample text so user can type immediately
-        const span = document.createElement('span');
-        Object.assign(span.style, styles);
-        span.innerHTML = '&#8203;';
-        range.insertNode(span);
+        // If cursor is inside an existing styled span, update it in place instead of nesting
+        const parentEl =
+          range.startContainer.nodeType === Node.ELEMENT_NODE
+            ? (range.startContainer as HTMLElement)
+            : range.startContainer.parentElement;
 
-        const nextRange = document.createRange();
-        nextRange.setStart(span.firstChild || span, 1);
-        nextRange.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(nextRange);
-        savedRangeRef.current = nextRange.cloneRange();
-      } else {
-        // Wrap the selected fragment inside a styled <span>
-        const span = document.createElement('span');
-        Object.assign(span.style, styles);
-
-        try {
-          const contents = range.extractContents();
-          span.appendChild(contents);
+        if (parentEl && parentEl !== editor && parentEl.tagName === 'SPAN' && parentEl.textContent?.length === 0) {
+          Object.assign(parentEl.style, styles);
+        } else {
+          const span = document.createElement('span');
+          Object.assign(span.style, styles);
+          span.innerHTML = '&#8203;';
           range.insertNode(span);
 
           const nextRange = document.createRange();
-          nextRange.selectNodeContents(span);
+          nextRange.setStart(span.firstChild || span, 1);
+          nextRange.collapse(true);
           sel.removeAllRanges();
           sel.addRange(nextRange);
           savedRangeRef.current = nextRange.cloneRange();
-        } catch {
-          // Fallback if selection crosses complex block boundaries
-          if (styles.fontFamily) {
-            document.execCommand('fontName', false, styles.fontFamily);
+        }
+      } else {
+        // If the entire selection is already inside a single <span> with identical text, update its style directly
+        const commonEl =
+          range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? (range.commonAncestorContainer as HTMLElement)
+            : range.commonAncestorContainer.parentElement;
+
+        if (
+          commonEl &&
+          commonEl !== editor &&
+          commonEl.tagName === 'SPAN' &&
+          commonEl.textContent === range.toString()
+        ) {
+          Object.assign(commonEl.style, styles);
+          const nextRange = document.createRange();
+          nextRange.selectNodeContents(commonEl);
+          sel.removeAllRanges();
+          sel.addRange(nextRange);
+          savedRangeRef.current = nextRange.cloneRange();
+        } else {
+          const span = document.createElement('span');
+          Object.assign(span.style, styles);
+
+          try {
+            const contents = range.extractContents();
+            // Flatten redundant nested spans for the same style properties inside extracted fragment
+            const innerSpans = contents.querySelectorAll('span');
+            innerSpans.forEach((inner) => {
+              if (styles.fontSize) inner.style.fontSize = '';
+              if (styles.fontFamily) inner.style.fontFamily = '';
+              if (styles.color) inner.style.color = '';
+              if (styles.backgroundColor) inner.style.backgroundColor = '';
+              if (!inner.getAttribute('style')?.trim()) {
+                inner.removeAttribute('style');
+              }
+            });
+
+            span.appendChild(contents);
+            range.insertNode(span);
+
+            const nextRange = document.createRange();
+            nextRange.selectNodeContents(span);
+            sel.removeAllRanges();
+            sel.addRange(nextRange);
+            savedRangeRef.current = nextRange.cloneRange();
+          } catch {
+            // Fallback for complex multi-block selections
+            if (styles.fontFamily) {
+              document.execCommand('fontName', false, styles.fontFamily);
+            }
+            if (styles.color) {
+              document.execCommand('foreColor', false, styles.color);
+            }
+            if (styles.backgroundColor) {
+              document.execCommand('hiliteColor', false, styles.backgroundColor);
+            }
           }
         }
       }
@@ -507,19 +652,26 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
       }
 
       const nextValue = `${value}${snippet}`;
-      onChange(nextValue);
+      onChange(sanitizeEditorOutputHtml(nextValue));
       syncVisualEditorIfNeeded(nextValue);
     },
     [emitHtmlChange, onChange, restoreSavedSelection, syncVisualEditorIfNeeded, value, viewMode]
   );
 
-  // Format Block (H1, H2, H3, Paragraph, Blockquote, Codeblock)
+  // Format Block (H1, H2, H3, Paragraph, Blockquote, Codeblock, Callout, Horizontal Rule)
   const applyBlockFormat = useCallback(
-    (blockType: 'P' | 'H1' | 'H2' | 'H3' | 'BLOCKQUOTE' | 'CODEBLOCK' | 'CALLOUT') => {
+    (blockType: 'P' | 'H1' | 'H2' | 'H3' | 'BLOCKQUOTE' | 'CODEBLOCK' | 'CALLOUT' | 'HR') => {
       if (disabled) return;
 
       const range = restoreSavedSelection();
       const selectedText = range ? range.toString().trim() : '';
+
+      if (blockType === 'HR') {
+        insertHtmlAtCursorOrAppend(
+          '\n<hr class="my-5 border-t border-slate-300 dark:border-slate-700" /><p><br/></p>\n'
+        );
+        return;
+      }
 
       if (blockType === 'CODEBLOCK') {
         const codeContent = escapeHtmlAttribute(
@@ -545,23 +697,75 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     [disabled, insertHtmlAtCursorOrAppend, restoreSavedSelection, runCommand]
   );
 
-  // Insert Link
-  const handleInsertLink = useCallback(() => {
-    if (disabled) return;
-    const range = restoreSavedSelection();
-    const selectedText = range ? range.toString().trim() : '';
-    const url = window.prompt('Informe a URL do link (ex: https://...):', 'https://');
-    if (!url || !url.trim()) return;
+  // Open Inline Link Popover instead of blocking window.prompt
+  const openLinkPopover = useCallback(() => {
+    if (disabled || viewMode !== 'visual') return;
+    saveCurrentSelection();
 
-    const safeUrl = escapeHtmlAttribute(url.trim());
-    if (selectedText) {
-      runCommand('createLink', safeUrl);
+    const range = savedRangeRef.current;
+    const selectedText = range ? range.toString().trim() : '';
+
+    if (activeAnchorEl) {
+      setLinkUrlInput(activeAnchorEl.getAttribute('href') || 'https://');
+      setLinkTextInput(activeAnchorEl.textContent || selectedText);
     } else {
-      insertHtmlAtCursorOrAppend(
-        `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">${safeUrl}</a>`
-      );
+      setLinkUrlInput('https://');
+      setLinkTextInput(selectedText);
     }
-  }, [disabled, insertHtmlAtCursorOrAppend, restoreSavedSelection, runCommand]);
+
+    setShowLinkPopover((prev) => !prev);
+    setShowColorMenu(false);
+    setShowTablePicker(false);
+  }, [activeAnchorEl, disabled, saveCurrentSelection, viewMode]);
+
+  const handleConfirmInsertLink = useCallback(
+    (e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      if (disabled) return;
+
+      const rawUrl = linkUrlInput.trim();
+      if (!rawUrl) {
+        setShowLinkPopover(false);
+        return;
+      }
+
+      const normalizedUrl =
+        /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      const safeUrl = escapeHtmlAttribute(normalizedUrl);
+      const displayLabel = escapeHtmlAttribute(linkTextInput.trim() || normalizedUrl);
+
+      if (activeAnchorEl && editableRef.current?.contains(activeAnchorEl)) {
+        activeAnchorEl.setAttribute('href', normalizedUrl);
+        activeAnchorEl.setAttribute('target', '_blank');
+        activeAnchorEl.setAttribute('rel', 'noopener noreferrer');
+        activeAnchorEl.className = 'text-blue-600 underline hover:text-blue-700';
+        if (linkTextInput.trim()) {
+          activeAnchorEl.textContent = linkTextInput.trim();
+        }
+        emitHtmlChange();
+      } else {
+        insertHtmlAtCursorOrAppend(
+          `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline hover:text-blue-700">${displayLabel}</a>`
+        );
+      }
+
+      setShowLinkPopover(false);
+    },
+    [activeAnchorEl, disabled, emitHtmlChange, insertHtmlAtCursorOrAppend, linkTextInput, linkUrlInput]
+  );
+
+  const handleRemoveLink = useCallback(() => {
+    if (activeAnchorEl && editableRef.current?.contains(activeAnchorEl)) {
+      const textNode = document.createTextNode(activeAnchorEl.textContent || '');
+      activeAnchorEl.replaceWith(textNode);
+      setActiveAnchorEl(null);
+      setShowLinkPopover(false);
+      emitHtmlChange();
+      return;
+    }
+    runCommand('unlink');
+    setShowLinkPopover(false);
+  }, [activeAnchorEl, emitHtmlChange, runCommand]);
 
   // Insert Interactive Table (Rows x Cols)
   const handleInsertTable = useCallback(
@@ -699,37 +903,38 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
   );
 
   // Detect clicks on images or videos inside the editor to enable resizing controls
+  // Uses `data-wiki-selected="true"` attribute (stripped on save) instead of mutating inline `style.outline`
   const handleEditorClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       saveCurrentSelection();
 
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'IMG' || target.tagName === 'VIDEO')) {
-        // Clear previous outline
         if (selectedMediaEl && selectedMediaEl !== target) {
-          selectedMediaEl.style.outline = '';
+          selectedMediaEl.removeAttribute('data-wiki-selected');
         }
-        target.style.outline = '2px solid #2563eb';
-        target.style.outlineOffset = '2px';
+        target.setAttribute('data-wiki-selected', 'true');
         setSelectedMediaEl(target);
 
         const editorWidth = editableRef.current?.clientWidth || 800;
         const rect = target.getBoundingClientRect();
-        const computedPct = Math.round(Math.min(100, Math.max(10, (rect.width / editorWidth) * 100)));
+        const computedPct = Math.round(
+          Math.min(100, Math.max(10, (rect.width / editorWidth) * 100))
+        );
         setMediaWidthPercent(computedPct);
         setMediaPixelDims({
           width: Math.round(rect.width),
           height: Math.round(rect.height),
         });
       } else if (selectedMediaEl) {
-        selectedMediaEl.style.outline = '';
+        selectedMediaEl.removeAttribute('data-wiki-selected');
         setSelectedMediaEl(null);
       }
     },
     [saveCurrentSelection, selectedMediaEl]
   );
 
-  // Resize selected image/video by percentage or pixel width
+  // Resize selected image/video by percentage
   const applySelectedMediaSize = useCallback(
     (nextPercent: number) => {
       if (!selectedMediaEl) return;
@@ -846,11 +1051,11 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     [emitHtmlChange, selectedMediaEl]
   );
 
-  // Clean up media selection outline before saving or unmounting
+  // Clean up media selection attribute before unmounting
   useEffect(() => {
     return () => {
       if (selectedMediaEl) {
-        selectedMediaEl.style.outline = '';
+        selectedMediaEl.removeAttribute('data-wiki-selected');
       }
     };
   }, [selectedMediaEl]);
@@ -903,7 +1108,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
               if (parsed && typeof parsed.url === 'string' && parsed.url.trim().length > 0) {
                 const snippet = buildMediaHtmlSnippet(parsed.url, file.name, mediaKind);
                 insertHtmlAtCursorOrAppend(snippet);
-                setLastUploadedUrl(parsed.url);
+                setLastUploadedUrl(toApiFileUrl(parsed.url) || parsed.url);
                 setUploadError(null);
                 resolve();
                 return;
@@ -1026,9 +1231,38 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
     [disabled, processIncomingFiles]
   );
 
-  // Keyboard shortcuts inside visual editor (Ctrl+B, Ctrl+I, Ctrl+U)
+  // Keyboard shortcuts inside visual editor (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+K, Tab in tables/lists)
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Tab') {
+        if (activeTableCell) {
+          e.preventDefault();
+          const table = activeTableCell.closest('table');
+          if (table) {
+            const cells = Array.from(table.querySelectorAll<HTMLTableCellElement>('th, td'));
+            const idx = cells.indexOf(activeTableCell);
+            if (idx !== -1) {
+              const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
+              const targetCell = cells[nextIdx];
+              if (targetCell) {
+                const range = document.createRange();
+                range.selectNodeContents(targetCell);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel?.removeAllRanges();
+                sel?.addRange(range);
+                saveCurrentSelection();
+              }
+            }
+          }
+          return;
+        }
+
+        e.preventDefault();
+        runCommand(e.shiftKey ? 'outdent' : 'indent');
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey) {
         const key = e.key.toLowerCase();
         if (key === 'b') {
@@ -1040,16 +1274,24 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         } else if (key === 'u') {
           e.preventDefault();
           runCommand('underline');
+        } else if (key === 'k') {
+          e.preventDefault();
+          openLinkPopover();
         }
       }
     },
-    [runCommand]
+    [activeTableCell, openLinkPopover, runCommand, saveCurrentSelection]
   );
 
   return (
     <div
+      ref={containerRef}
       aria-labelledby={editorHeadingId}
-      className="w-full max-w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs"
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-50 flex flex-col w-screen h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-2xl overflow-hidden'
+          : 'w-full max-w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
+      }
     >
       {/* Hidden File Input for manual upload button */}
       <input
@@ -1068,8 +1310,12 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
       />
 
       {/* PRIMARY MODERN WYSIWYG TOOLBAR */}
-      <div className="border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2.5 space-y-2 rounded-t-xl">
-        {/* Row 1: Font Family, Font Size, Headings, Undo/Redo & Mode Switcher */}
+      <div
+        className={`border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2.5 space-y-2 ${
+          isFullscreen ? '' : 'rounded-t-xl'
+        }`}
+      >
+        {/* Row 1: Font Family, Font Size, Headings, Undo/Redo, Fullscreen & Mode Switcher */}
         <div
           className="flex flex-wrap items-center justify-between gap-2"
           role="toolbar"
@@ -1111,6 +1357,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
                 aria-label="Selecionar Tipo de Fonte"
                 value={selectedFontFamily}
                 disabled={disabled || viewMode !== 'visual'}
+                onFocus={saveCurrentSelection}
                 onChange={(e) => handleFontFamilyChange(e.target.value)}
                 className="bg-transparent text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[175px]"
               >
@@ -1134,6 +1381,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
                 aria-label="Selecionar Tamanho da Fonte"
                 value={selectedFontSize}
                 disabled={disabled || viewMode !== 'visual'}
+                onFocus={saveCurrentSelection}
                 onChange={(e) => handleFontSizeChange(e.target.value)}
                 className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
               >
@@ -1194,39 +1442,60 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
           </div>
 
-          {/* Mode Switcher: Visual vs HTML Source */}
-          <div className="flex items-center rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden">
+          {/* Right Controls: Fullscreen Toggle & Visual/HTML Mode Switcher */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setViewMode('visual');
-                setTimeout(() => syncVisualEditorIfNeeded(value), 0);
-              }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase cursor-pointer ${
-                viewMode === 'visual'
-                  ? 'bg-slate-800 text-white dark:bg-blue-500 dark:text-slate-950 font-bold'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
+              onClick={() => setIsFullscreen((prev) => !prev)}
+              title={isFullscreen ? 'Sair da Tela Cheia' : 'Expandir Editor em Tela Cheia'}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
             >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Visual</span>
+              {isFullscreen ? (
+                <>
+                  <Shrink className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Reduzir</span>
+                </>
+              ) : (
+                <>
+                  <Expand className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Tela Cheia</span>
+                </>
+              )}
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('source')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase cursor-pointer ${
-                viewMode === 'source'
-                  ? 'bg-slate-800 text-white dark:bg-blue-500 dark:text-slate-950 font-bold'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5" />
-              <span>HTML</span>
-            </button>
+
+            <div className="flex items-center rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('visual');
+                  setTimeout(() => syncVisualEditorIfNeeded(value), 0);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase cursor-pointer ${
+                  viewMode === 'visual'
+                    ? 'bg-slate-800 text-white dark:bg-blue-500 dark:text-slate-950 font-bold'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Visual</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('source')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase cursor-pointer ${
+                  viewMode === 'source'
+                    ? 'bg-slate-800 text-white dark:bg-blue-500 dark:text-slate-950 font-bold'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>HTML</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Row 2: Selection Styles (Bold, Italic, Underline, Strike, Colors), Alignment, Lists, Table Builder, Code & Media */}
+        {/* Row 2: Selection Styles (Bold, Italic, Underline, Strike, Colors), Alignment, Lists, Link, Table Builder, Code & Media */}
         <div
           className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 dark:border-slate-800 pt-2"
           role="toolbar"
@@ -1301,6 +1570,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
               onClick={() => {
                 setShowColorMenu((prev) => !prev);
                 setShowTablePicker(false);
+                setShowLinkPopover(false);
               }}
               disabled={disabled || viewMode !== 'visual'}
               title="Cor do Texto e Marca-Texto"
@@ -1471,16 +1741,104 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             <ListOrdered className="w-4 h-4" />
           </button>
 
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={handleInsertLink}
-            disabled={disabled || viewMode !== 'visual'}
-            title="Inserir Link"
-            className="p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
-          >
-            <LinkIcon className="w-4 h-4" />
-          </button>
+          {/* Inline Link Popover Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={openLinkPopover}
+              disabled={disabled || viewMode !== 'visual'}
+              title="Inserir ou Editar Link (Ctrl+K)"
+              className={`p-2 rounded-md border cursor-pointer ${
+                activeAnchorEl || showLinkPopover
+                  ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              <LinkIcon className="w-4 h-4" />
+            </button>
+
+            {showLinkPopover && (
+              <div className="absolute left-0 top-full z-40 mt-1.5 w-80 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3.5 shadow-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    {activeAnchorEl ? 'Editar Link Selecionado' : 'Inserir Link'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowLinkPopover(false)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Texto Exibido
+                  </label>
+                  <input
+                    type="text"
+                    value={linkTextInput}
+                    onChange={(e) => setLinkTextInput(e.target.value)}
+                    placeholder="Ex: Documentação Oficial"
+                    className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    URL de Destino
+                  </label>
+                  <input
+                    type="url"
+                    value={linkUrlInput}
+                    onChange={(e) => setLinkUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleConfirmInsertLink();
+                      }
+                    }}
+                    placeholder="https://..."
+                    className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  {activeAnchorEl ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleRemoveLink}
+                        className="inline-flex items-center gap-1 rounded-md border border-rose-200 dark:border-rose-800 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                      >
+                        <Unlink className="w-3 h-3" /> Remover
+                      </button>
+                      <a
+                        href={activeAnchorEl.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Abrir
+                      </a>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmInsertLink()}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -1493,6 +1851,17 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             <Quote className="w-4 h-4" />
           </button>
 
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyBlockFormat('HR')}
+            disabled={disabled}
+            title="Inserir Divisor Horizontal"
+            className="p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+          >
+            <SeparatorHorizontal className="w-4 h-4" />
+          </button>
+
           <span className="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
 
           {/* INTERACTIVE TABLE BUILDER BUTTON + POPOVER */}
@@ -1503,6 +1872,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
               onClick={() => {
                 setShowTablePicker((prev) => !prev);
                 setShowColorMenu(false);
+                setShowLinkPopover(false);
               }}
               disabled={disabled}
               title="Criar Tabela Personalizada"
@@ -1633,11 +2003,12 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/40 px-4 py-2 text-xs">
           <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-200">
             <TableIcon className="w-4 h-4 text-emerald-600" />
-            Tabela Selecionada:
+            Tabela Selecionada (Use Tab para navegar entre células):
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('addRowAbove')}
               className="inline-flex items-center gap-1 rounded border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-100 cursor-pointer"
             >
@@ -1645,6 +2016,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('addRowBelow')}
               className="inline-flex items-center gap-1 rounded border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-100 cursor-pointer"
             >
@@ -1652,6 +2024,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('deleteRow')}
               className="inline-flex items-center gap-1 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-50 cursor-pointer"
             >
@@ -1662,6 +2035,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
 
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('addColLeft')}
               className="inline-flex items-center gap-1 rounded border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-100 cursor-pointer"
             >
@@ -1669,6 +2043,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('addColRight')}
               className="inline-flex items-center gap-1 rounded border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-100 cursor-pointer"
             >
@@ -1676,6 +2051,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('deleteCol')}
               className="inline-flex items-center gap-1 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 px-2 py-1 font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-50 cursor-pointer"
             >
@@ -1686,6 +2062,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
 
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => manipulateActiveTable('deleteTable')}
               className="inline-flex items-center gap-1 rounded bg-rose-600 px-2.5 py-1 font-semibold text-white hover:bg-rose-700 cursor-pointer"
             >
@@ -1834,10 +2211,19 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
       {uploadError && (
         <div
           role="alert"
-          className="border-b border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-4 py-2.5 flex items-center gap-2 text-xs text-red-900 dark:text-red-200"
+          className="border-b border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-red-900 dark:text-red-200"
         >
-          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-          <span>{uploadError}</span>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{uploadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUploadError(null)}
+            className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/50"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -1850,6 +2236,13 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             Mídia inserida (clique na imagem/vídeo para aumentar ou diminuir): {lastUploadedUrl}
           </span>
+          <button
+            type="button"
+            onClick={() => setLastUploadedUrl(null)}
+            className="rounded p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -1858,7 +2251,9 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className="relative w-full max-w-full min-h-[580px] lg:min-h-[680px] overflow-x-hidden"
+        className={`relative w-full max-w-full overflow-x-hidden ${
+          isFullscreen ? 'flex-1 overflow-y-auto' : 'min-h-[580px] lg:min-h-[680px]'
+        }`}
       >
         {/* FLOATING BUBBLE TOOLBAR WHEN TEXT IS SELECTED */}
         {bubbleMenu.visible && viewMode === 'visual' && (
@@ -1913,6 +2308,7 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             <select
               aria-label="Tamanho rápido da fonte"
               value={selectedFontSize}
+              onFocus={saveCurrentSelection}
               onChange={(e) => handleFontSizeChange(e.target.value)}
               className="bg-slate-800 text-white text-[11px] rounded px-1.5 py-1 border border-slate-700 cursor-pointer"
             >
@@ -1941,9 +2337,9 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
 
             <button
               type="button"
-              onClick={handleInsertLink}
+              onClick={openLinkPopover}
               className="p-1.5 rounded hover:bg-slate-700 cursor-pointer"
-              title="Transformar seleção em Link"
+              title="Transformar seleção em Link (Ctrl+K)"
             >
               <LinkIcon className="w-3.5 h-3.5" />
             </button>
@@ -1981,8 +2377,11 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
           <div
             ref={(node) => {
               editableRef.current = node;
-              if (node && node.innerHTML !== value && document.activeElement !== node) {
-                node.innerHTML = value;
+              if (node && document.activeElement !== node) {
+                const cleaned = sanitizeEditorOutputHtml(value);
+                if (sanitizeEditorOutputHtml(node.innerHTML) !== cleaned) {
+                  node.innerHTML = cleaned;
+                }
               }
             }}
             contentEditable={!disabled}
@@ -1995,21 +2394,23 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
             onMouseUp={saveCurrentSelection}
             onKeyUp={saveCurrentSelection}
             onKeyDown={handleKeyDown}
-            onInput={(e) => onChange(e.currentTarget.innerHTML)}
+            onInput={(e) => onChange(sanitizeEditorOutputHtml(e.currentTarget.innerHTML))}
             onPaste={handlePaste}
             style={{
               overflowWrap: 'anywhere',
               wordBreak: 'break-word',
               whiteSpace: 'pre-wrap',
             }}
-            className="w-full max-w-full min-h-[580px] lg:min-h-[680px] max-h-[82vh] overflow-y-auto overflow-x-hidden resize-y p-6 lg:p-8 text-base leading-relaxed text-slate-800 dark:text-slate-100 break-words whitespace-pre-wrap focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 prose prose-slate dark:prose-invert max-w-none [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:max-w-full [&_code]:break-words [&_p]:break-words [&_a]:break-all [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:p-2 [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_img]:cursor-pointer [&_img]:transition-all [&_video]:cursor-pointer empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400"
+            className={`w-full min-h-[580px] lg:min-h-[680px] ${
+              isFullscreen ? 'h-full max-h-none' : 'max-h-[82vh] resize-y'
+            } overflow-y-auto overflow-x-hidden p-6 lg:p-8 text-base leading-relaxed text-slate-800 dark:text-slate-100 break-words whitespace-pre-wrap focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 prose prose-slate dark:prose-invert max-w-none [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:max-w-full [&_code]:break-words [&_p]:break-words [&_a]:break-all [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:p-2 [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_img]:cursor-pointer [&_img]:transition-all [&_video]:cursor-pointer [&_[data-wiki-selected=true]]:ring-2 [&_[data-wiki-selected=true]]:ring-blue-600 [&_[data-wiki-selected=true]]:ring-offset-2 empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400`}
           />
         ) : (
           <textarea
             value={value}
             disabled={disabled}
             wrap="soft"
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(sanitizeEditorOutputHtml(e.target.value))}
             onPaste={handlePaste}
             placeholder={placeholder}
             aria-label="Código HTML do artigo da Wiki"
@@ -2018,17 +2419,28 @@ export const WikiRichTextEditor: React.FC<WikiRichTextEditorProps> = ({
               wordBreak: 'break-word',
               whiteSpace: 'pre-wrap',
             }}
-            className="w-full max-w-full min-h-[580px] lg:min-h-[680px] p-6 font-mono text-sm leading-relaxed bg-slate-950 text-slate-100 break-words whitespace-pre-wrap overflow-x-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 resize-y"
+            className={`w-full min-h-[580px] lg:min-h-[680px] ${
+              isFullscreen ? 'h-full' : 'resize-y'
+            } p-6 font-mono text-sm leading-relaxed bg-slate-950 text-slate-100 break-words whitespace-pre-wrap overflow-x-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600`}
           />
         )}
       </div>
 
-      {/* Technical Footer */}
-      <div className="border-t border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-600 dark:text-slate-400 rounded-b-xl">
+      {/* Technical Footer with Live Metrics */}
+      <div
+        className={`border-t border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-600 dark:text-slate-400 ${
+          isFullscreen ? '' : 'rounded-b-xl'
+        }`}
+      >
         <span>
-          Dica: Selecione qualquer texto para formatar ou clique em uma imagem/tabela para abrir os controles de tamanho e células.
+          Dica: Selecione texto para formatar, use Tab em tabelas/listas ou clique em imagens/vídeos para redimensionar.
         </span>
-        <span>Upload local até 50MB (PNG, JPG, WEBP, GIF, MP4, WEBM, MOV)</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-slate-700 dark:text-slate-300">
+            {textMetrics.words} palavras • {textMetrics.chars} caracteres (~{textMetrics.readMin} min leitura)
+          </span>
+          <span>Upload até 50MB</span>
+        </div>
       </div>
     </div>
   );

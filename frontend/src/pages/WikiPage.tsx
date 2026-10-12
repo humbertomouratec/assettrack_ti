@@ -21,10 +21,10 @@ import {
   User as UserIcon,
   X,
 } from 'lucide-react';
-import { API_ORIGIN, apiClient } from '../api/client';
+import { API_BASE_URL, API_ORIGIN, apiClient, toApiFileUrl } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import { WikiDepartmentPermissionsPanel } from '../components/wiki/WikiDepartmentPermissionsPanel';
-import { WikiRichTextEditor } from '../components/wiki/WikiRichTextEditor';
+import { WikiRichTextEditor, sanitizeEditorOutputHtml } from '../components/wiki/WikiRichTextEditor';
 
 interface WikiCategory {
   id: number;
@@ -262,7 +262,8 @@ export const WikiPage: React.FC = () => {
 
   const handleSaveArticle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim() || !formContent.trim() || !formCategoryId) {
+    const cleanedContent = sanitizeEditorOutputHtml(formContent);
+    if (!formTitle.trim() || !cleanedContent.trim() || !formCategoryId) {
       setErrorBanner('Preencha o título, a categoria e o conteúdo do artigo.');
       return;
     }
@@ -276,7 +277,7 @@ export const WikiPage: React.FC = () => {
         const res = await apiClient.put<WikiArticle>(`/wiki/articles/${editingArticleId}`, {
           title: formTitle.trim(),
           summary: formSummary.trim(),
-          content: formContent,
+          content: cleanedContent,
           content_format: 'html',
           is_published: true,
           change_summary: formChangeSummary.trim() || 'Atualização de conteúdo',
@@ -290,7 +291,7 @@ export const WikiPage: React.FC = () => {
           category_id: Number(formCategoryId),
           title: formTitle.trim(),
           summary: formSummary.trim(),
-          content: formContent,
+          content: cleanedContent,
           content_format: 'html',
           is_published: true,
         });
@@ -814,7 +815,7 @@ export const WikiPage: React.FC = () => {
                   <WikiRichTextEditor
                     value={formContent}
                     onChange={setFormContent}
-                    uploadEndpoint={`${API_ORIGIN}/api/v1/wiki/upload`}
+                    uploadEndpoint={`${API_BASE_URL}/wiki/upload`}
                     authToken={token || undefined}
                   />
                 </div>
@@ -921,8 +922,13 @@ export const WikiPage: React.FC = () => {
                     overflowWrap: 'anywhere',
                     wordBreak: 'break-word',
                   }}
-                  className="prose prose-slate dark:prose-invert w-full max-w-full overflow-x-hidden break-words text-base leading-relaxed text-slate-800 dark:text-slate-200 [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-4 [&_pre]:text-slate-100 [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:max-w-full [&_code]:font-mono [&_code]:break-words [&_p]:break-words [&_a]:break-all [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 dark:[&_td]:border-slate-700 [&_td]:p-2.5 [&_th]:border [&_th]:border-slate-300 dark:[&_th]:border-slate-700 [&_th]:p-2.5 [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_img]:rounded-lg [&_img]:max-w-full [&_video]:rounded-lg [&_video]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: selectedArticle.content }}
+                  className="prose prose-slate dark:prose-invert w-full overflow-x-hidden break-words text-base leading-relaxed text-slate-800 dark:text-slate-200 max-w-none [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-4 [&_pre]:text-slate-100 [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:max-w-full [&_code]:font-mono [&_code]:break-words [&_p]:break-words [&_a]:break-all [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 dark:[&_td]:border-slate-700 [&_td]:p-2.5 [&_th]:border [&_th]:border-slate-300 dark:[&_th]:border-slate-700 [&_th]:p-2.5 [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_img]:rounded-lg [&_img]:max-w-full [&_video]:rounded-lg [&_video]:max-w-full"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeEditorOutputHtml(selectedArticle.content).replace(
+                      /(src=["'])(\/uploads\/wiki\/[^"']+)(["'])/gi,
+                      (_, prefix, relPath, suffix) => `${prefix}${toApiFileUrl(relPath)}${suffix}`
+                    ),
+                  }}
                 />
               </article>
             ) : (
