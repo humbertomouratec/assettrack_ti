@@ -10,6 +10,7 @@ import { MediaAttachmentInput } from '../components/rh/MediaAttachmentInput';
 import { ComunicadoDetailModal } from '../components/rh/ComunicadoDetailModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDate as fmtDate, toInputDate } from '../utils/dateUtils';
 
 const statusStyles: Record<string, string> = {
   Pendente: 'border-yellow-500/30 text-yellow-400',
@@ -25,14 +26,9 @@ const employeeStatus: Record<RHStatusType, { label: string; className: string; c
   desligado: { label: 'Desligado', className: 'border-red-500/30 text-red-600 bg-red-500/10', calendarClassName: 'border-red-300 border-l-red-600 bg-red-50 text-red-800' },
 };
 
-const dateInputValue = () => {
-  const date = new Date();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
-};
+const dateInputValue = () => toInputDate(new Date());
 
-const formatDate = (value?: string | null) => value ? new Date(value).toLocaleDateString('pt-BR') : '-';
+const formatDate = (value?: string | null) => value ? fmtDate(value) : '-';
 
 const dateOnly = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 

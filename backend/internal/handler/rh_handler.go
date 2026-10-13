@@ -16,6 +16,7 @@ import (
 	"github.com/assettrack/backend/internal/models"
 	"github.com/assettrack/backend/internal/repository"
 	"github.com/assettrack/backend/internal/service"
+	"github.com/assettrack/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -79,8 +80,9 @@ func parseRHDate(value string, endOfDay bool) (*time.Time, error) {
 	if value == "" {
 		return nil, nil
 	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04", "2006-01-02"} {
-		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+	loc := utils.LocationSP()
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		if parsed, err := time.ParseInLocation(layout, value, loc); err == nil {
 			if layout == "2006-01-02" && endOfDay {
 				parsed = parsed.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 			}
@@ -406,7 +408,7 @@ func (h *RHHandler) StatusDashboard(c *gin.Context) {
 	for _, status := range statuses {
 		byUser[status.UsuarioID] = append(byUser[status.UsuarioID], status)
 	}
-	now := time.Now()
+	now := utils.NowSP()
 	colaboradores := monitoringTeamPayload(users, byUser, now, false)
 	c.JSON(http.StatusOK, gin.H{"colaboradores": colaboradores, "status": statuses, "comunicados": comunicados, "atualizado_em": now})
 }
@@ -461,7 +463,7 @@ func (h *RHHandler) MonitoringTeam(c *gin.Context) {
 	for _, status := range statuses {
 		byUser[status.UsuarioID] = append(byUser[status.UsuarioID], status)
 	}
-	now := time.Now()
+	now := utils.NowSP()
 	c.JSON(http.StatusOK, gin.H{"colaboradores": monitoringTeamPayload(users, byUser, now, true), "atualizado_em": now})
 }
 
@@ -499,7 +501,11 @@ func (h *RHHandler) CreateStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Data final inválida"})
 		return
 	}
-	if fim != nil && fim.Before(*inicio) {
+	if fim == nil {
+		endOfDay := inicio.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		fim = &endOfDay
+	}
+	if fim.Before(*inicio) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "A data final deve ser posterior ao início"})
 		return
 	}
