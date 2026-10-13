@@ -90,3 +90,13 @@ export function toInputDate(value?: string | Date | null): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Retorna a data normalizada para início do dia (00:00:00) no fuso local.
+ */
+export function getLocalDateOnly(value?: string | Date | null): Date | null {
+  const d = parseDate(value);
+  if (!d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+

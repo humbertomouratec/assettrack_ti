@@ -10,7 +10,7 @@ import { MediaAttachmentInput } from '../components/rh/MediaAttachmentInput';
 import { ComunicadoDetailModal } from '../components/rh/ComunicadoDetailModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatDate as fmtDate, toInputDate } from '../utils/dateUtils';
+import { formatDate as fmtDate, toInputDate, getLocalDateOnly } from '../utils/dateUtils';
 
 const statusStyles: Record<string, string> = {
   Pendente: 'border-yellow-500/30 text-yellow-400',
@@ -50,8 +50,9 @@ const exportPeriodRange = (mode: 'week' | 'month', referenceValue: string) => {
 };
 
 const overlapsPeriod = (record: RHStatusRecord, start: Date, end: Date) => {
-  const recordStart = new Date(record.inicio);
-  const recordEnd = new Date(record.fim || record.inicio);
+  const recordStart = getLocalDateOnly(record.inicio);
+  const recordEnd = getLocalDateOnly(record.fim || record.inicio);
+  if (!recordStart || !recordEnd) return false;
   return recordStart <= end && recordEnd >= start;
 };
 
@@ -66,9 +67,11 @@ const RHMonthlyCalendar: React.FC<{ records: RHStatusRecord[]; sectorId: string 
   }, [reference]);
   const filteredRecords = sectorId ? records.filter(item => String(item.usuario?.departamento_id ?? '') === sectorId) : records;
   const eventsForDay = (date: Date) => filteredRecords.filter(item => {
-    const start = new Date(item.inicio); const end = new Date(item.fim || item.inicio);
-    const calendarDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    return calendarDate >= new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime() && calendarDate <= new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+    const start = getLocalDateOnly(item.inicio);
+    const end = getLocalDateOnly(item.fim || item.inicio);
+    if (!start || !end) return false;
+    const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    return targetDay >= start.getTime() && targetDay <= end.getTime();
   });
   return <div className="border border-brand-border bg-brand-card">
     <div className="p-4 border-b border-brand-border flex items-center gap-3"><CalendarDays size={16} className="text-brand-primary" /><span className="text-sm font-bold font-mono uppercase tracking-wider text-brand-text">Calendário de RH</span><div className="ml-auto flex gap-2"><button type="button" onClick={() => setReference(new Date(reference.getFullYear(), reference.getMonth() - 1, 1))} className="text-xs text-brand-primary">←</button><span className="text-xs text-brand-muted capitalize min-w-32 text-center">{reference.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span><button type="button" onClick={() => setReference(new Date(reference.getFullYear(), reference.getMonth() + 1, 1))} className="text-xs text-brand-primary">→</button></div></div>
@@ -1063,7 +1066,7 @@ export const RHPage: React.FC = () => {
           </div>
 
           {(control.status.length > 0 || control.comunicados.length > 0) && <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="border border-brand-border bg-brand-card"><div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><Clock3 size={16} className="text-brand-primary" /> Agenda de RH</div><div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">{control.status.slice(0, 20).map(s => <div className="p-3 flex justify-between gap-3" key={s.id}><div><span className="text-brand-text">{s.usuario?.nome || 'Colaborador'}</span><span className="ml-2 text-xs text-brand-muted">{new Date(s.inicio).toLocaleDateString('pt-BR')}{s.fim ? ` até ${new Date(s.fim).toLocaleDateString('pt-BR')}` : ''}</span><p className="text-xs text-brand-muted m-0 mt-1">{s.observacao || (s.horas ? `${s.horas}h registradas` : '')}</p></div><div className="flex gap-2 items-start"><span className={`text-[10px] font-mono uppercase px-2 py-1 border ${employeeStatus[s.tipo].className}`}>{employeeStatus[s.tipo].label}</span><button type="button" title="Remover registro" onClick={() => action(() => rhApi.deleteStatus(s.id), 'Remover este registro de calendário?')} className="text-red-400"><XCircle size={16} /></button></div></div>)}</div></div>
+            <div className="border border-brand-border bg-brand-card"><div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><Clock3 size={16} className="text-brand-primary" /> Agenda de RH</div><div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">{control.status.slice(0, 20).map(s => <div className="p-3 flex justify-between gap-3" key={s.id}><div><span className="text-brand-text">{s.usuario?.nome || 'Colaborador'}</span><span className="ml-2 text-xs text-brand-muted">{formatDate(s.inicio)}{s.fim ? ` até ${formatDate(s.fim)}` : ''}</span><p className="text-xs text-brand-muted m-0 mt-1">{s.observacao || (s.horas ? `${s.horas}h registradas` : '')}</p></div><div className="flex gap-2 items-start"><span className={`text-[10px] font-mono uppercase px-2 py-1 border ${employeeStatus[s.tipo].className}`}>{employeeStatus[s.tipo].label}</span><button type="button" title="Remover registro" onClick={() => action(() => rhApi.deleteStatus(s.id), 'Remover este registro de calendário?')} className="text-red-400"><XCircle size={16} /></button></div></div>)}</div></div>
             <div className="border border-brand-border bg-brand-card">
               <div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text">
                 <MessageSquareText size={16} className="text-brand-primary" /> Comunicados enviados
