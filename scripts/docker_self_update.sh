@@ -42,8 +42,12 @@ with open('$STATE_FILE.tmp', 'w') as f:
 
   if [ -f "$STATE_FILE.tmp" ]; then
     mv -f "$STATE_FILE.tmp" "$STATE_FILE"
+    chmod 666 "$STATE_FILE" 2>/dev/null || true
   fi
 }
+
+touch "$LOG_FILE" 2>/dev/null || true
+chmod 666 "$LOG_FILE" 2>/dev/null || true
 
 echo "=== Registro de Atualização do AssetTrack TI ($JOB_ID) ===" > "$LOG_FILE"
 update_json_state "updating" "True" ""

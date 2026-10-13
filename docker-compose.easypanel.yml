@@ -8,6 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no EasyPanel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no EasyPanel}
       POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no EasyPanel}
+      TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - assettrack_postgres_data:/var/lib/postgresql/data
     healthcheck:

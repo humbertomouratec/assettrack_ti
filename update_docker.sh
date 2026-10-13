@@ -70,6 +70,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null || docker ps
 
 # Sincronizar estado persistido de atualização
 NOW_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+(
 cat <<EOF > .system_update_state.json
 {
   "job_id": "manual-$(date +%s)",
@@ -79,7 +80,9 @@ cat <<EOF > .system_update_state.json
   "updated_at": "${NOW_ISO}"
 }
 EOF
+chmod 666 .system_update_state.json .system_update_state.log 2>/dev/null || true
 echo "[$(date +%H:%M:%S)] Atualização manual via terminal concluída com sucesso!" >> .system_update_state.log 2>/dev/null || true
+) 2>/dev/null || true
 
 echo ""
 echo "------------------------------------------------"

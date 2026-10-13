@@ -1,15 +1,33 @@
 package utils
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
-// NowSP returns current time in America/Sao_Paulo as naive (no timezone info)
-// Mirrors Python's now_sp() from app/core/datetime_utils.py
-func NowSP() time.Time {
+// LocationSP returns America/Sao_Paulo location or time.Local on fallback
+func LocationSP() *time.Location {
 	loc, err := time.LoadLocation("America/Sao_Paulo")
 	if err != nil {
-		return time.Now()
+		return time.Local
 	}
-	return time.Now().In(loc)
+	return loc
+}
+
+// NowSP returns current time in America/Sao_Paulo
+func NowSP() time.Time {
+	return time.Now().In(LocationSP())
+}
+
+// ParseDateSP parses YYYY-MM-DD or RFC3339 in America/Sao_Paulo
+func ParseDateSP(value string) (*time.Time, error) {
+	loc := LocationSP()
+	for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+		if t, err := time.ParseInLocation(layout, value, loc); err == nil {
+			return &t, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid date format: %s", value)
 }
 
 // StringPtr returns a pointer to a string

@@ -50,6 +50,7 @@ import {
   Minimize2,
   Bot,
 } from 'lucide-react';
+import { formatDate as fmtDate, formatDateTime as fmtDateTime, toInputDate } from '../utils/dateUtils';
 
 const columnPalette = ['#60A5FA', '#F59E0B', '#06B6D4', '#34D399', '#F87171', '#22D3EE'];
 const boardBackgroundPalette = ['#212121', '#0F172A', '#12304A', '#14532D', '#5B2333', '#3B1D78', '#6B3F12', '#334155'];
@@ -425,12 +426,12 @@ export const KanbanPage: React.FC = () => {
 
   const formatDate = (date?: string) => {
     if (!date) return null;
-    return new Date(date).toLocaleDateString('pt-BR');
+    return fmtDate(date);
   };
 
   const formatDateTime = (date?: string | null) => {
     if (!date) return null;
-    return new Date(date).toLocaleString('pt-BR');
+    return fmtDateTime(date);
   };
 
   const getInitials = (name?: string) => {
@@ -779,7 +780,7 @@ export const KanbanPage: React.FC = () => {
     setCColumn(card.column_id);
     setCPriority(card.prioridade || 'media');
     setCResponsavel(card.responsavel_id ?? null);
-    setCDue(card.data_entrega ? new Date(card.data_entrega).toISOString().slice(0, 10) : '');
+    setCDue(toInputDate(card.data_entrega));
     setCLink(getCardPrimaryLinkUrl(card) || '');
     setCLinkName(getCardPrimaryLinkAttachment(card)?.nome?.replace(new RegExp(`^${PRIMARY_LINK_PREFIX}\\s*`, 'i'), '') || '');
     setCColor(normalizeCardColor(card.cor || defaultCardColor));

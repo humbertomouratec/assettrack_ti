@@ -18,6 +18,7 @@ import (
 	"github.com/assettrack/backend/internal/models"
 	"github.com/assettrack/backend/internal/repository"
 	"github.com/assettrack/backend/internal/service"
+	"github.com/assettrack/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -1120,8 +1121,8 @@ func (h *KanbanHandler) CreateCard(c *gin.Context) {
 	}
 	card.ChecklistJSON = checklistJSON
 	if in.DataEntrega != nil && *in.DataEntrega != "" {
-		if t, err := time.Parse("2006-01-02", *in.DataEntrega); err == nil {
-			card.DataEntrega = &t
+		if t, err := utils.ParseDateSP(*in.DataEntrega); err == nil {
+			card.DataEntrega = t
 		}
 	}
 
@@ -1241,8 +1242,8 @@ func (h *KanbanHandler) UpdateCard(c *gin.Context) {
 	card.Prioridade = normalizeEnumValue(in.Prioridade, []string{models.CardPriorityBaixa, models.CardPriorityMedia, models.CardPriorityAlta, models.CardPriorityUrgente}, models.CardPriorityMedia)
 	card.DataEntrega = nil
 	if in.DataEntrega != nil && *in.DataEntrega != "" {
-		if t, err := time.Parse("2006-01-02", *in.DataEntrega); err == nil {
-			card.DataEntrega = &t
+		if t, err := utils.ParseDateSP(*in.DataEntrega); err == nil {
+			card.DataEntrega = t
 		}
 	}
 	card.UpdatedAt = time.Now()

@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-assettrack}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-assettrack_password}
       POSTGRES_DB: ${POSTGRES_DB:-assettrack}
+      TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - zimaos_postgres_data:/var/lib/postgresql/data
     healthcheck:

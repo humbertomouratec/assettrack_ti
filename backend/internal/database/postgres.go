@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -12,6 +13,15 @@ import (
 var DB *gorm.DB
 
 func ConnectPostgres(dsn string) *gorm.DB {
+	// Ensure TimeZone is set to America/Sao_Paulo in connection string if not present
+	if !strings.Contains(dsn, "TimeZone=") && !strings.Contains(dsn, "timezone=") {
+		separator := "?"
+		if strings.Contains(dsn, "?") {
+			separator = "&"
+		}
+		dsn = dsn + separator + "TimeZone=America/Sao_Paulo"
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:                 logger.Default.LogMode(logger.Warn),
 		SkipDefaultTransaction: true,
