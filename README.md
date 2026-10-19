@@ -124,6 +124,21 @@ http://IP_DO_SERVIDOR:8000
 O aplicativo completa automaticamente o caminho da API para `/api/v1`.
 
 ### 1. Inicialização Rápida (Automação)
+
+#### No Windows (Recomendado)
+Para instalar e configurar o AssetTrack TI no Windows com verificação de pré-requisitos (`winget`, Docker, Git), inicialização do Docker Desktop, configuração de `.env` e criação de atalho na Área de Trabalho:
+
+- **Via duplo clique:** basta clicar duas vezes em `instalar.bat`
+- **Via PowerShell:**
+  ```powershell
+  .\instalar.ps1
+  ```
+
+Para o dia a dia no Windows:
+- **Iniciar containers:** duplo clique em `iniciar.bat` (ou `docker compose up -d`)
+- **Parar containers:** duplo clique em `parar.bat` (ou `docker compose down`)
+
+#### No Linux / macOS / WSL
 O projeto inclui um script que configura o ambiente, sobe os containers e inicializa o usuário administrador automaticamente:
 
 ```bash
