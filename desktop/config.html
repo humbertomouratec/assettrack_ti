@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Configurar Servidor - AssetTrack TI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #092b24;
+      color: #ecf4ee;
+      padding: 28px;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      justify-content: space-between;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      background: #c1f45a;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #092b24;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    h1 { font-size: 1.25rem; font-weight: 600; color: #fff; }
+    p.desc { font-size: 0.85rem; color: #a4bea9; line-height: 1.5; margin-bottom: 18px; }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    label { font-size: 0.8rem; font-weight: 600; color: #c1f45a; text-transform: uppercase; letter-spacing: 0.05em; }
+    input[type="text"] {
+      background: #061f1a;
+      border: 1.5px solid #285e4f;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 1rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: #c1f45a;
+      box-shadow: 0 0 10px rgba(193, 244, 90, 0.25);
+    }
+    .presets {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .preset-label { font-size: 0.75rem; color: #7f9f8f; }
+    .preset-btn {
+      background: #113d32;
+      border: 1px solid #1f5546;
+      color: #b8d4c5;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-family: monospace;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover {
+      background: #195244;
+      color: #c1f45a;
+      border-color: #c1f45a55;
+    }
+    .footer-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 18px;
+    }
+    button.action {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s, background 0.15s;
+    }
+    button.primary {
+      background: #c1f45a;
+      color: #092b24;
+    }
+    button.primary:hover {
+      background: #d4fc79;
+      transform: translateY(-1px);
+    }
+    button.secondary {
+      background: transparent;
+      color: #a4bea9;
+      border: 1px solid #285e4f;
+    }
+    button.secondary:hover {
+      background: #113d32;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="header">
+      <div class="logo-badge">A</div>
+      <h1>Configurar Endereço do Servidor</h1>
+    </div>
+    <p class="desc">
+      Insira o endereço HTTP/HTTPS ou IP do servidor onde o AssetTrack TI está hospedado (ex: rede local da empresa ou nuvem).
+    </p>
+
+    <div class="form-group">
+      <label for="serverInput">Endereço do Servidor (URL / IP)</label>
+      <input type="text" id="serverInput" placeholder="http://192.168.1.100:8000" spellcheck="false" autocomplete="off" />
+    </div>
+
+    <div class="presets">
+      <span class="preset-label">Atalhos rápidos:</span>
+      <button type="button" class="preset-btn" onclick="setPreset('http://localhost:8000')">localhost:8000</button>
+      <button type="button" class="preset-btn" onclick="setPreset('http://127.0.0.1:8000')">127.0.0.1:8000</button>
+    </div>
+  </div>
+
+  <div class="footer-actions">
+    <button type="button" class="action secondary" onclick="cancel()">Cancelar</button>
+    <button type="button" class="action primary" onclick="save()">Salvar e Conectar</button>
+  </div>
+
+  <script>
+    const input = document.getElementById('serverInput');
+
+    // Carregar URL atual
+    if (window.desktopAPI && window.desktopAPI.getServerUrl) {
+      window.desktopAPI.getServerUrl().then(url => {
+        if (url) input.value = url;
+        input.focus();
+        input.select();
+      });
+    }
+
+    function setPreset(url) {
+      input.value = url;
+      input.focus();
+    }
+
+    function save() {
+      let val = (input.value || '').trim();
+      if (!val) {
+        val = 'http://localhost:8000';
+      }
+      if (!/^https?:\/\//i.test(val)) {
+        val = 'http://' + val;
+      }
+      if (window.desktopAPI && window.desktopAPI.setServerUrl) {
+        window.desktopAPI.setServerUrl(val);
+      }
+    }
+
+    function cancel() {
+      if (window.desktopAPI && window.desktopAPI.closeConfigWindow) {
+        window.desktopAPI.closeConfigWindow();
+      }
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') cancel();
+    });
+  </script>
+</body>
+</html>

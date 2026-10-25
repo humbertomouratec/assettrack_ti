@@ -1,0 +1,31 @@
+{
+  "name": "assettrack-ti-desktop",
+  "version": "1.2.0",
+  "description": "AssetTrack TI - Cliente Desktop Nativo para Windows",
+  "main": "main.js",
+  "author": "AssetTrack TI",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.assettrack.ti.desktop",
+    "productName": "AssetTrack TI",
+    "copyright": "Copyright © 2026 AssetTrack TI",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico"
+    },
+    "portable": {
+      "artifactName": "AssetTrack-TI-Portable.exe"
+    }
+  }
+}
