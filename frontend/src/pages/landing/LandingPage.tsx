@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { LoginAccess } from './LoginAccess';
+import { AudioPresentation } from './AudioPresentation';
 import './landing.css';
 import {
   ArrowUpRight,
@@ -135,6 +136,7 @@ export function LandingPage() {
           <span>assettrack<span className="brand-ti">TI</span></span>
         </a>
         <nav aria-label="Navegação principal">
+          <a href="#apresentacao">Apresentação</a>
           <a href="#plataforma">Plataforma</a>
           <a href="#fluxo">Como funciona</a>
           <a href="#mobilidade">Mobilidade</a>
@@ -152,7 +154,16 @@ export function LandingPage() {
             <div className="hero-copy">
               <h1>Sua TI conectada.<br />Tudo sob <em>controle.</em></h1>
               <p>Ativos, suporte, IoT e equipes no mesmo lugar. Transforme informações dispersas em uma operação organizada, do primeiro cadastro à próxima decisão.</p>
-              <a className="button lime" href="#plataforma">Conheça o AssetTrack <ArrowUpRight size={20} /></a>
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <a className="button lime" href="#plataforma">Conheça o AssetTrack <ArrowUpRight size={20} /></a>
+                <a
+                  className="button"
+                  href="#apresentacao"
+                  style={{ background: '#113a30', color: '#c1f45a', border: '1px solid #285e4f' }}
+                >
+                  Ouvir Áudio (1 min) <Headphones size={18} />
+                </a>
+              </div>
               <div className="hero-notes">
                 <span><Check size={16} /> Rastreabilidade & QR</span>
                 <span><Check size={16} /> IoT & Telemetria</span>
@@ -185,9 +196,11 @@ export function LandingPage() {
           </div>
           <div className="hero-bottom">
             <span>MENOS INFORMAÇÃO DISPERSA. MAIS VISIBILIDADE.</span>
-            <a href="#plataforma">Explore o que se conecta <ArrowRight size={17} /></a>
+            <a href="#apresentacao">Ouça a apresentação em áudio com o avatar <ArrowRight size={17} /></a>
           </div>
         </section>
+
+        <AudioPresentation />
 
         <section className="platform section" id="plataforma">
           <div className="section-heading">
