@@ -44,6 +44,8 @@ export const rhApi = {
     await apiClient.put(`/rh/colaboradores/${userId}/monitoramento`, { show_on_monitoring: showOnMonitoring });
   },
   deleteStatus: async (id: number): Promise<void> => { await apiClient.delete(`/rh/status/${id}`); },
+  updateStatus: async (id: number, data: { tipo?: string; inicio?: string; fim?: string; horas?: number; observacao?: string }): Promise<RHStatusRecord> =>
+    (await apiClient.put<RHStatusRecord>(`/rh/status/${id}`, data)).data,
   uploadComunicadoMedia: async (file: File | Blob, filename?: string, midiaTipo?: string): Promise<{ url: string; midia_tipo: string; filename: string }> => {
     const formData = new FormData();
     const resolvedName = filename || (file instanceof File ? file.name : (midiaTipo === 'audio' ? 'gravacao_audio.weba' : midiaTipo === 'video' ? 'gravacao_video.webm' : 'media_record.webm'));

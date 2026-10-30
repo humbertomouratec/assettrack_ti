@@ -563,6 +563,92 @@ func (h *RHHandler) DeleteStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Registro de status removido"})
 }
 
+type rhStatusUpdateInput struct {
+	Tipo       *string  `json:"tipo"`
+	Inicio     string   `json:"inicio"`
+	Fim        *string  `json:"fim"`
+	Horas      *float64 `json:"horas"`
+	Observacao *string  `json:"observacao"`
+}
+
+func (h *RHHandler) UpdateStatus(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+	status, err := h.rhRepo.GetStatusByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Registro de status não encontrado"})
+		return
+	}
+	if !h.visibleToCurrent(c, status.Usuario) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Você só pode editar registros da sua equipe configurada"})
+		return
+	}
+
+	var in rhStatusUpdateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if in.Tipo != nil && strings.TrimSpace(*in.Tipo) != "" {
+		tipo := strings.TrimSpace(strings.ToLower(*in.Tipo))
+		if !validRHStatusTypes[tipo] || tipo == "desligado" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Status inválido"})
+			return
+		}
+		status.Tipo = tipo
+	}
+
+	if strings.TrimSpace(in.Inicio) != "" {
+		inicio, err := parseRHDate(in.Inicio, false)
+		if err != nil || inicio == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data de início inválida"})
+			return
+		}
+		status.Inicio = *inicio
+	}
+
+	if in.Fim != nil {
+		if strings.TrimSpace(*in.Fim) != "" {
+			fim, err := parseRHDate(*in.Fim, true)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Data final inválida"})
+				return
+			}
+			if fim != nil && fim.Before(status.Inicio) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "A data final deve ser posterior ao início"})
+				return
+			}
+			status.Fim = fim
+		} else {
+			endOfDay := status.Inicio.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			status.Fim = &endOfDay
+		}
+	}
+
+	if in.Horas != nil {
+		status.Horas = in.Horas
+	}
+	if in.Observacao != nil {
+		obs := strings.TrimSpace(*in.Observacao)
+		if obs == "" {
+			status.Observacao = nil
+		} else {
+			status.Observacao = &obs
+		}
+	}
+
+	if err := h.rhRepo.UpdateStatus(status); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
 func (h *RHHandler) CreateComunicado(c *gin.Context) {
 	if !h.canAccessRHTeam(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Acesso liberado somente para RH, administradores ou gestores com equipe configurada"})

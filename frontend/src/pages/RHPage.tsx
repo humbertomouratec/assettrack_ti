@@ -118,6 +118,30 @@ export const RHPage: React.FC = () => {
   const [hierarchySearch, setHierarchySearch] = useState('');
   const [hierarchyMembers, setHierarchyMembers] = useState<number[]>([]);
 
+  // Gestão Integrada de Presença & Agenda: Abas e Filtros
+  const [managementTab, setManagementTab] = useState<'quadro' | 'agenda'>('quadro');
+
+  // Filtros do Quadro da Equipe (Hoje)
+  const [quadroSearch, setQuadroSearch] = useState('');
+  const [quadroSector, setQuadroSector] = useState('');
+  const [quadroStatus, setQuadroStatus] = useState<string>('todos');
+
+  // Filtros da Agenda de RH (Programações)
+  const [agendaSearch, setAgendaSearch] = useState('');
+  const [agendaSector, setAgendaSector] = useState('');
+  const [agendaStatus, setAgendaStatus] = useState<string>('todos');
+
+  // Modal de Edição Rápida de Status (Reprogramar Datas/Horas/Obs)
+  const [editingStatus, setEditingStatus] = useState<RHStatusRecord | null>(null);
+  const [editStatusForm, setEditStatusForm] = useState({
+    tipo: 'folga',
+    inicio: dateInputValue(),
+    fim: '',
+    horas: '',
+    observacao: '',
+  });
+  const [savingStatusEdit, setSavingStatusEdit] = useState(false);
+
   const statusSectorOptions = useMemo(() => {
     const sectors = new Map<string, string>();
     control?.colaboradores.forEach(({ usuario }) => {
@@ -145,6 +169,111 @@ export const RHPage: React.FC = () => {
       return true;
     });
   }, [control, statusSector, statusUserSearch]);
+
+  const quadroCounts = useMemo(() => {
+    if (!control) return { total: 0, trabalhando: 0, folga: 0, ferias: 0, banco_horas: 0, desligado: 0 };
+    const counts = { total: 0, trabalhando: 0, folga: 0, ferias: 0, banco_horas: 0, desligado: 0 };
+    control.colaboradores.forEach(c => {
+      if (!c.usuario.is_active) {
+        counts.desligado++;
+        return;
+      }
+      counts.total++;
+      if ((counts as Record<string, number>)[c.status_atual] !== undefined) {
+        (counts as Record<string, number>)[c.status_atual]++;
+      }
+    });
+    return counts;
+  }, [control]);
+
+  const filteredQuadroCollaborators = useMemo(() => {
+    if (!control) return [];
+    return control.colaboradores.filter(c => {
+      if (!c.usuario.is_active && quadroStatus !== 'desligado') return false;
+      if (quadroSector && String(c.usuario.departamento_id ?? '') !== quadroSector) return false;
+      if (quadroStatus !== 'todos' && c.status_atual !== quadroStatus) return false;
+      if (quadroSearch.trim()) {
+        const query = quadroSearch.toLowerCase();
+        const name = (c.usuario.nome || '').toLowerCase();
+        const email = (c.usuario.email || '').toLowerCase();
+        const matricula = (c.usuario.matricula || '').toLowerCase();
+        const cargo = (c.usuario.cargo || '').toLowerCase();
+        const dept = (c.usuario.departamento?.nome || '').toLowerCase();
+        return name.includes(query) || email.includes(query) || matricula.includes(query) || cargo.includes(query) || dept.includes(query);
+      }
+      return true;
+    });
+  }, [control, quadroSector, quadroStatus, quadroSearch]);
+
+  const agendaCounts = useMemo(() => {
+    if (!control) return { total: 0, folga: 0, ferias: 0, banco_horas: 0, trabalhando: 0 };
+    const counts = { total: control.status.length, folga: 0, ferias: 0, banco_horas: 0, trabalhando: 0 };
+    control.status.forEach(r => {
+      if ((counts as Record<string, number>)[r.tipo] !== undefined) {
+        (counts as Record<string, number>)[r.tipo]++;
+      }
+    });
+    return counts;
+  }, [control]);
+
+  const filteredAgendaRecords = useMemo(() => {
+    if (!control) return [];
+    return control.status.filter(record => {
+      if (agendaSector && String(record.usuario?.departamento_id ?? '') !== agendaSector) return false;
+      if (agendaStatus !== 'todos' && record.tipo !== agendaStatus) return false;
+      if (agendaSearch.trim()) {
+        const query = agendaSearch.toLowerCase();
+        const name = (record.usuario?.nome || '').toLowerCase();
+        const email = (record.usuario?.email || '').toLowerCase();
+        const cargo = (record.usuario?.cargo || '').toLowerCase();
+        const dept = (record.usuario?.departamento?.nome || '').toLowerCase();
+        const obs = (record.observacao || '').toLowerCase();
+        return name.includes(query) || email.includes(query) || cargo.includes(query) || dept.includes(query) || obs.includes(query);
+      }
+      return true;
+    });
+  }, [control, agendaSector, agendaStatus, agendaSearch]);
+
+  const openEditStatus = (record: RHStatusRecord) => {
+    setEditingStatus(record);
+    setEditStatusForm({
+      tipo: record.tipo,
+      inicio: record.inicio ? toInputDate(new Date(record.inicio)) : dateInputValue(),
+      fim: record.fim ? toInputDate(new Date(record.fim)) : '',
+      horas: record.horas != null ? String(record.horas) : '',
+      observacao: record.observacao || '',
+    });
+  };
+
+  const handleUpdateStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStatus) return;
+    setSavingStatusEdit(true);
+    try {
+      await rhApi.updateStatus(editingStatus.id, {
+        tipo: editStatusForm.tipo,
+        inicio: editStatusForm.inicio,
+        fim: editStatusForm.fim || undefined,
+        horas: editStatusForm.horas ? Number(editStatusForm.horas) : undefined,
+        observacao: editStatusForm.observacao || undefined,
+      });
+      setEditingStatus(null);
+      await fetchData();
+      alert('Programação da agenda atualizada com sucesso!');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Não foi possível atualizar o status.');
+    } finally {
+      setSavingStatusEdit(false);
+    }
+  };
+
+  const quickSelectCollaborator = (userId: number) => {
+    setStatusForm(prev => ({ ...prev, usuario_id: String(userId) }));
+    const formEl = document.getElementById('registrar-status-card');
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -592,7 +721,7 @@ export const RHPage: React.FC = () => {
           </section>}
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <form onSubmit={saveStatus} className="border border-brand-border bg-brand-card p-5 space-y-4">
+            <form id="registrar-status-card" onSubmit={saveStatus} className="border border-brand-border bg-brand-card p-5 space-y-4">
               <div className="flex items-start gap-3">
                 <div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
                   <ClipboardPlus size={18} />
@@ -1031,49 +1160,438 @@ export const RHPage: React.FC = () => {
             <RHMonthlyCalendar records={control.status} sectorId={calendarSector} />
           </div>
 
-          <div className="border border-brand-border bg-brand-card">
-            <div className="p-4 border-b border-brand-border flex items-center gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><UsersRound size={16} className="text-brand-primary" /> Status atual da equipe <span className="ml-auto text-[10px] normal-case text-brand-muted font-normal">atualiza automaticamente</span></div>
-            <div className="divide-y divide-brand-border/60 max-h-[340px] overflow-y-auto">
-              {control.colaboradores.map(({ usuario, status_atual, horas }) => {
-                const avatarUrl = toApiFileUrl(usuario.avatar_url);
-                return <div key={usuario.id} className="p-3 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-brand-border bg-brand-dark">
-                      {avatarUrl ? <img src={avatarUrl} alt={usuario.nome} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs font-bold text-brand-primary">{usuario.nome.slice(0, 2).toUpperCase()}</div>}
-                    </div>
-                    <div className="min-w-0">
-                      <span className="font-medium text-brand-text">{usuario.nome}</span>
-                      <span className="ml-2 text-xs text-brand-muted">{usuario.cargo || 'Cargo não definido'}</span>
-                      {status_atual === 'banco_horas' && horas ? <p className="m-0 mt-0.5 text-xs text-amber-700">{horas}h em banco de horas</p> : null}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className={`text-[10px] font-mono uppercase px-2 py-1 border ${employeeStatus[status_atual].className}`}>{employeeStatus[status_atual].label}</span>
-                    {isRHAdmin && <button
-                      type="button"
-                      onClick={() => toggleMonitoringVisibility(usuario.id, !!usuario.show_on_monitoring)}
-                      title={usuario.show_on_monitoring ? 'Ocultar na sala de monitoramento' : 'Mostrar na sala de monitoramento'}
-                      className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-mono uppercase ${usuario.show_on_monitoring ? 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10' : 'border-brand-border text-brand-muted hover:text-brand-text'}`}
-                    >
-                      {usuario.show_on_monitoring ? <Eye size={13} /> : <EyeOff size={13} />}
-                      {usuario.show_on_monitoring ? 'Na sala' : 'Oculto'}
-                    </button>}
-                  </div>
-                </div>;
-              })}
-              {control.colaboradores.length === 0 && <div className="p-6 text-center text-sm text-brand-muted">Nenhum subordinado configurado para sua equipe.</div>}
+          {/* Painel de Gestão Integrado: Quadro de Presença (Hoje) e Agenda & Escalas Programadas */}
+          <div className="border border-brand-border bg-brand-card rounded-xl overflow-hidden shadow-sm">
+            {/* Header com Abas */}
+            <div className="p-4 border-b border-brand-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-brand-dark/20">
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg bg-brand-primary/10 p-2 text-brand-primary">
+                  {managementTab === 'quadro' ? <UsersRound size={18} /> : <Clock3 size={18} />}
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold font-mono uppercase tracking-wider text-brand-text">
+                    {managementTab === 'quadro' ? 'Quadro de Presença da Equipe (Hoje)' : 'Agenda de RH & Programações'}
+                  </h2>
+                  <p className="text-[11px] text-brand-muted m-0">
+                    {managementTab === 'quadro'
+                      ? 'Acompanhe a disponibilidade e status atual de cada colaborador em tempo real.'
+                      : 'Gerencie folgas, banco de horas e férias programadas com edição e cancelamento.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Alternador de Abas */}
+              <div className="inline-flex rounded-lg border border-brand-border bg-brand-dark/50 p-1 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setManagementTab('quadro')}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold font-mono uppercase transition-colors ${
+                    managementTab === 'quadro'
+                      ? 'bg-brand-primary text-brand-dark font-bold shadow-sm'
+                      : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <UsersRound size={14} />
+                  <span>Quadro Hoje</span>
+                  <span className="rounded-full px-1.5 py-0.2 text-[10px] bg-black/20 text-current font-bold">
+                    {quadroCounts.total}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setManagementTab('agenda')}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold font-mono uppercase transition-colors ${
+                    managementTab === 'agenda'
+                      ? 'bg-brand-primary text-brand-dark font-bold shadow-sm'
+                      : 'text-brand-muted hover:text-brand-text'
+                  }`}
+                >
+                  <Clock3 size={14} />
+                  <span>Agenda Programada</span>
+                  <span className="rounded-full px-1.5 py-0.2 text-[10px] bg-black/20 text-current font-bold">
+                    {agendaCounts.total}
+                  </span>
+                </button>
+              </div>
             </div>
+
+            {/* ABA 1: Quadro de Colaboradores (Hoje) */}
+            {managementTab === 'quadro' && (
+              <div className="p-4 space-y-4">
+                {/* Filtros do Quadro */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-brand-dark/30 p-3 rounded-lg border border-brand-border/60">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-2.5 text-brand-muted" />
+                    <input
+                      type="text"
+                      value={quadroSearch}
+                      onChange={e => setQuadroSearch(e.target.value)}
+                      placeholder="Buscar por colaborador, matrícula, cargo..."
+                      className="w-full bg-brand-dark border border-brand-border py-1.5 pl-9 pr-7 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    />
+                    {quadroSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setQuadroSearch('')}
+                        className="absolute right-2.5 top-2 text-brand-muted hover:text-brand-text"
+                        title="Limpar busca"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="w-full md:w-56 shrink-0">
+                    <select
+                      value={quadroSector}
+                      onChange={e => setQuadroSector(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-1.5 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    >
+                      <option value="">Todos os setores ({statusSectorOptions.length})</option>
+                      {statusSectorOptions.map(sec => (
+                        <option key={sec.id} value={sec.id}>{sec.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Chips de filtro por Status */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-mono uppercase text-brand-muted mr-1 flex items-center gap-1">
+                    <Filter size={11} /> Filtrar status:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuadroStatus('todos')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      quadroStatus === 'todos'
+                        ? 'bg-brand-primary text-brand-dark border-brand-primary font-bold'
+                        : 'border-brand-border bg-brand-dark/40 text-brand-muted hover:text-brand-text'
+                    }`}
+                  >
+                    Todos ({quadroCounts.total})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuadroStatus('trabalhando')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      quadroStatus === 'trabalhando'
+                        ? 'bg-emerald-500 text-white border-emerald-500 font-bold'
+                        : 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    Trabalhando ({quadroCounts.trabalhando})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuadroStatus('folga')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      quadroStatus === 'folga'
+                        ? 'bg-sky-500 text-white border-sky-500 font-bold'
+                        : 'border-sky-500/30 text-sky-600 bg-sky-500/10 hover:bg-sky-500/20'
+                    }`}
+                  >
+                    Folga ({quadroCounts.folga})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuadroStatus('ferias')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      quadroStatus === 'ferias'
+                        ? 'bg-teal-500 text-white border-teal-500 font-bold'
+                        : 'border-teal-500/30 text-teal-600 bg-teal-500/10 hover:bg-teal-500/20'
+                    }`}
+                  >
+                    Férias ({quadroCounts.ferias})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuadroStatus('banco_horas')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      quadroStatus === 'banco_horas'
+                        ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                        : 'border-amber-500/30 text-amber-700 bg-amber-500/10 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    Banco de horas ({quadroCounts.banco_horas})
+                  </button>
+                </div>
+
+                {/* Lista de Colaboradores */}
+                <div className="divide-y divide-brand-border/60 max-h-[460px] overflow-y-auto border border-brand-border/70 rounded-lg">
+                  {filteredQuadroCollaborators.map(({ usuario, status_atual, horas }) => {
+                    const avatarUrl = toApiFileUrl(usuario.avatar_url);
+                    return (
+                      <div key={usuario.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-brand-dark/20 transition-colors">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-brand-border bg-brand-dark">
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt={usuario.nome} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="grid h-full place-items-center text-xs font-bold text-brand-primary">
+                                {usuario.nome.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-brand-text text-sm">{usuario.nome}</span>
+                              {usuario.matricula && (
+                                <span className="text-[10px] font-mono text-brand-muted bg-brand-dark/60 px-1.5 py-0.5 rounded border border-brand-border/60">
+                                  Matrícula: {usuario.matricula}
+                                </span>
+                              )}
+                              {usuario.departamento?.nome && (
+                                <span className="text-[10px] font-mono font-medium text-brand-muted flex items-center gap-1 bg-brand-dark/40 px-1.5 py-0.5 rounded border border-brand-border/40">
+                                  <Building2 size={10} /> {usuario.departamento.nome}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                              <span className="text-xs text-brand-muted">{usuario.cargo || 'Cargo não definido'}</span>
+                              {status_atual === 'banco_horas' && horas ? (
+                                <span className="text-xs text-amber-700 font-mono font-semibold">
+                                  • {horas}h em banco de horas
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                          <span className={`text-[10px] font-mono uppercase px-2.5 py-1 border rounded ${employeeStatus[status_atual].className}`}>
+                            {employeeStatus[status_atual].label}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => quickSelectCollaborator(usuario.id)}
+                            title="Lançar novo status para este colaborador"
+                            className="inline-flex items-center gap-1 text-[11px] font-mono uppercase bg-brand-primary/10 border border-brand-primary/30 text-brand-primary hover:bg-brand-primary hover:text-brand-dark px-2.5 py-1 rounded transition-colors"
+                          >
+                            <Plus size={12} />
+                            <span>Novo Status</span>
+                          </button>
+
+                          {isRHAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => toggleMonitoringVisibility(usuario.id, !!usuario.show_on_monitoring)}
+                              title={usuario.show_on_monitoring ? 'Ocultar na sala de monitoramento' : 'Mostrar na sala de monitoramento'}
+                              className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-mono uppercase rounded ${
+                                usuario.show_on_monitoring
+                                  ? 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+                                  : 'border-brand-border text-brand-muted hover:text-brand-text'
+                              }`}
+                            >
+                              {usuario.show_on_monitoring ? <Eye size={12} /> : <EyeOff size={12} />}
+                              <span>{usuario.show_on_monitoring ? 'Na sala' : 'Oculto'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {filteredQuadroCollaborators.length === 0 && (
+                    <div className="p-8 text-center text-sm text-brand-muted">
+                      Nenhum colaborador encontrado com os filtros aplicados.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center text-[11px] text-brand-muted font-mono px-1">
+                  <span>Exibindo {filteredQuadroCollaborators.length} de {quadroCounts.total} colaboradores</span>
+                  <span>Atualização em tempo real (a cada 30s)</span>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 2: Agenda & Escalas Programadas */}
+            {managementTab === 'agenda' && (
+              <div className="p-4 space-y-4">
+                {/* Filtros da Agenda */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-brand-dark/30 p-3 rounded-lg border border-brand-border/60">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-2.5 text-brand-muted" />
+                    <input
+                      type="text"
+                      value={agendaSearch}
+                      onChange={e => setAgendaSearch(e.target.value)}
+                      placeholder="Buscar por colaborador, cargo, observação..."
+                      className="w-full bg-brand-dark border border-brand-border py-1.5 pl-9 pr-7 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    />
+                    {agendaSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAgendaSearch('')}
+                        className="absolute right-2.5 top-2 text-brand-muted hover:text-brand-text"
+                        title="Limpar busca"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="w-full md:w-56 shrink-0">
+                    <select
+                      value={agendaSector}
+                      onChange={e => setAgendaSector(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border px-3 py-1.5 text-xs text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                    >
+                      <option value="">Todos os setores</option>
+                      {statusSectorOptions.map(sec => (
+                        <option key={sec.id} value={sec.id}>{sec.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Chips de filtro por Status da Agenda */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-mono uppercase text-brand-muted mr-1 flex items-center gap-1">
+                    <Filter size={11} /> Filtrar por tipo:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatus('todos')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      agendaStatus === 'todos'
+                        ? 'bg-brand-primary text-brand-dark border-brand-primary font-bold'
+                        : 'border-brand-border bg-brand-dark/40 text-brand-muted hover:text-brand-text'
+                    }`}
+                  >
+                    Todos ({agendaCounts.total})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatus('folga')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      agendaStatus === 'folga'
+                        ? 'bg-sky-500 text-white border-sky-500 font-bold'
+                        : 'border-sky-500/30 text-sky-600 bg-sky-500/10 hover:bg-sky-500/20'
+                    }`}
+                  >
+                    Folga ({agendaCounts.folga})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatus('ferias')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      agendaStatus === 'ferias'
+                        ? 'bg-teal-500 text-white border-teal-500 font-bold'
+                        : 'border-teal-500/30 text-teal-600 bg-teal-500/10 hover:bg-teal-500/20'
+                    }`}
+                  >
+                    Férias ({agendaCounts.ferias})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatus('banco_horas')}
+                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                      agendaStatus === 'banco_horas'
+                        ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                        : 'border-amber-500/30 text-amber-700 bg-amber-500/10 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    Banco de horas ({agendaCounts.banco_horas})
+                  </button>
+                </div>
+
+                {/* Lista de Registros da Agenda (SEM slice(0, 20)!) */}
+                <div className="divide-y divide-brand-border/60 max-h-[460px] overflow-y-auto border border-brand-border/70 rounded-lg">
+                  {filteredAgendaRecords.map(s => (
+                    <div key={s.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-brand-dark/20 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-brand-text text-sm">
+                            {s.usuario?.nome || 'Colaborador'}
+                          </span>
+                          {s.usuario?.departamento?.nome && (
+                            <span className="text-[10px] font-mono text-brand-muted bg-brand-dark/60 px-1.5 py-0.5 rounded border border-brand-border/60 flex items-center gap-1">
+                              <Building2 size={10} /> {s.usuario.departamento.nome}
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-mono uppercase px-2 py-0.5 border rounded ${employeeStatus[s.tipo].className}`}>
+                            {employeeStatus[s.tipo].label}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-brand-muted">
+                          <span className="font-mono text-brand-text font-medium flex items-center gap-1">
+                            <CalendarDays size={12} className="text-brand-primary" />
+                            {formatDate(s.inicio)}{s.fim ? ` até ${formatDate(s.fim)}` : ''}
+                          </span>
+                          {s.horas ? (
+                            <span className="font-mono text-amber-700 font-semibold">• {s.horas}h registradas</span>
+                          ) : null}
+                          {s.criado_por?.nome ? (
+                            <span className="text-[11px]">• Criado por: {s.criado_por.nome}</span>
+                          ) : null}
+                        </div>
+
+                        {s.observacao && (
+                          <p className="text-xs text-brand-muted/90 m-0 mt-1 italic font-sans bg-brand-dark/30 p-1.5 rounded border border-brand-border/40">
+                            "{s.observacao}"
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => openEditStatus(s)}
+                          className="inline-flex items-center gap-1.5 text-xs font-mono uppercase text-brand-primary bg-brand-primary/10 border border-brand-primary/30 hover:bg-brand-primary hover:text-brand-dark px-2.5 py-1.5 rounded transition-colors"
+                          title="Mudar datas ou detalhes deste status"
+                        >
+                          <Edit2 size={13} />
+                          <span>Mudar data</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          title="Remover registro de calendário"
+                          onClick={() => action(() => rhApi.deleteStatus(s.id), `Remover o registro de ${employeeStatus[s.tipo].label} de ${s.usuario?.nome || 'colaborador'}?`)}
+                          className="inline-flex items-center gap-1 text-xs font-mono uppercase text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500 hover:text-white px-2.5 py-1.5 rounded transition-colors"
+                        >
+                          <XCircle size={13} />
+                          <span>Excluir</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredAgendaRecords.length === 0 && (
+                    <div className="p-8 text-center text-sm text-brand-muted">
+                      Nenhum registro de agenda encontrado com os filtros aplicados.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center text-[11px] text-brand-muted font-mono px-1">
+                  <span>Exibindo {filteredAgendaRecords.length} de {agendaCounts.total} registros programados</span>
+                  <span>Gestão total de ausências e escalas</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {(control.status.length > 0 || control.comunicados.length > 0) && <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="border border-brand-border bg-brand-card"><div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text"><Clock3 size={16} className="text-brand-primary" /> Agenda de RH</div><div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">{control.status.slice(0, 20).map(s => <div className="p-3 flex justify-between gap-3" key={s.id}><div><span className="text-brand-text">{s.usuario?.nome || 'Colaborador'}</span><span className="ml-2 text-xs text-brand-muted">{formatDate(s.inicio)}{s.fim ? ` até ${formatDate(s.fim)}` : ''}</span><p className="text-xs text-brand-muted m-0 mt-1">{s.observacao || (s.horas ? `${s.horas}h registradas` : '')}</p></div><div className="flex gap-2 items-start"><span className={`text-[10px] font-mono uppercase px-2 py-1 border ${employeeStatus[s.tipo].className}`}>{employeeStatus[s.tipo].label}</span><button type="button" title="Remover registro" onClick={() => action(() => rhApi.deleteStatus(s.id), 'Remover este registro de calendário?')} className="text-red-400"><XCircle size={16} /></button></div></div>)}</div></div>
-            <div className="border border-brand-border bg-brand-card">
-              <div className="p-4 border-b border-brand-border flex gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text">
-                <MessageSquareText size={16} className="text-brand-primary" /> Comunicados enviados
+          {/* Seção de Comunicados Internos Enviados */}
+          {control.comunicados.length > 0 && (
+            <div className="border border-brand-border bg-brand-card rounded-xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-brand-border flex items-center justify-between gap-2 bg-brand-dark/20">
+                <div className="flex items-center gap-2 text-sm font-bold font-mono uppercase tracking-wider text-brand-text">
+                  <MessageSquareText size={16} className="text-brand-primary" />
+                  <span>Comunicados Internos Enviados</span>
+                </div>
+                <span className="text-xs font-mono text-brand-muted">
+                  {control.comunicados.length} comunicado{control.comunicados.length > 1 ? 's' : ''}
+                </span>
               </div>
-              <div className="divide-y divide-brand-border/60 max-h-72 overflow-y-auto">
-                {control.comunicados.slice(0, 20).map(n => (
-                  <div className="p-3 flex justify-between gap-3 hover:bg-brand-dark/20 transition-colors" key={n.id}>
+              <div className="divide-y divide-brand-border/60 max-h-80 overflow-y-auto">
+                {control.comunicados.map(n => (
+                  <div className="p-3.5 flex justify-between gap-3 hover:bg-brand-dark/20 transition-colors" key={n.id}>
                     <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreviewComunicado(n)}>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-brand-text text-sm hover:underline">{n.titulo}</span>
@@ -1147,7 +1665,7 @@ export const RHPage: React.FC = () => {
                 ))}
               </div>
             </div>
-          </div>}
+          )}
         </>
       )}
 
@@ -1338,6 +1856,134 @@ export const RHPage: React.FC = () => {
             setPreviewComunicado(null);
           }}
         />
+      )}
+
+      {/* Modal de Edição Rápida de Status (Mudar Datas) */}
+      {editingStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-brand-border bg-brand-card shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-brand-border flex items-center justify-between bg-brand-dark/40">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-brand-text">Mudar Data / Editar Status</h3>
+                  <p className="text-xs text-brand-muted m-0">
+                    Colaborador: <strong className="text-brand-text">{editingStatus.usuario?.nome}</strong>
+                    {editingStatus.usuario?.departamento?.nome ? ` • ${editingStatus.usuario?.departamento?.nome}` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStatus(null)}
+                className="text-brand-muted hover:text-brand-text p-1 rounded-lg hover:bg-brand-dark"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStatus} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                  Tipo de Status
+                </label>
+                <select
+                  value={editStatusForm.tipo}
+                  onChange={e => setEditStatusForm({ ...editStatusForm, tipo: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                >
+                  <option value="trabalhando">Trabalhando</option>
+                  <option value="folga">Folga</option>
+                  <option value="ferias">Férias</option>
+                  <option value="banco_horas">Banco de horas</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                    Data Início <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    required
+                    type="date"
+                    value={editStatusForm.inicio}
+                    onChange={e => setEditStatusForm({ ...editStatusForm, inicio: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                    Data Fim (opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={editStatusForm.fim}
+                    onChange={e => setEditStatusForm({ ...editStatusForm, fim: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                  />
+                </div>
+              </div>
+
+              {editStatusForm.tipo === 'banco_horas' && (
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                    Quantidade de horas
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="Ex: 4 ou 8"
+                    value={editStatusForm.horas}
+                    onChange={e => setEditStatusForm({ ...editStatusForm, horas: e.target.value })}
+                    className="w-full bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-brand-muted mb-1">
+                  Motivo da alteração / Observação (opcional)
+                </label>
+                <textarea
+                  placeholder="Ex: Reprogramado por necessidade de escala, troca de dia, etc."
+                  value={editStatusForm.observacao}
+                  onChange={e => setEditStatusForm({ ...editStatusForm, observacao: e.target.value })}
+                  className="w-full min-h-20 bg-brand-dark border border-brand-border px-3 py-2 text-sm text-brand-text rounded focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-border">
+                <button
+                  type="button"
+                  onClick={() => setEditingStatus(null)}
+                  className="px-4 py-2 text-xs font-mono uppercase text-brand-muted hover:text-brand-text border border-brand-border rounded hover:bg-brand-dark"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStatusEdit}
+                  className="inline-flex items-center gap-2 bg-brand-primary text-brand-dark font-bold font-mono px-5 py-2 uppercase tracking-wider text-xs rounded hover:bg-brand-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {savingStatusEdit ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Salvar Alterações</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

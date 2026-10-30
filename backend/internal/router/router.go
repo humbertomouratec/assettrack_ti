@@ -458,6 +458,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			rh.GET("/controle", rhHandler.StatusDashboard)
 			rh.GET("/controle/export.csv", rhHandler.ExportStatusCSV)
 			rh.POST("/status", rhHandler.CreateStatus)
+			rh.PUT("/status/:id", rhHandler.UpdateStatus)
 			rh.DELETE("/status/:id", rhHandler.DeleteStatus)
 			rh.PUT("/colaboradores/:id/monitoramento", rhHandler.UpdateMonitoringVisibility)
 			rh.POST("/comunicados", rhHandler.CreateComunicado)

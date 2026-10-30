@@ -24,6 +24,12 @@ func (r *RHRepository) ListStatusesForUser(userID uint) ([]models.RHStatus, erro
 
 func (r *RHRepository) CreateStatus(status *models.RHStatus) error { return r.db.Create(status).Error }
 func (r *RHRepository) DeleteStatus(id uint) error                 { return r.db.Delete(&models.RHStatus{}, id).Error }
+func (r *RHRepository) UpdateStatus(status *models.RHStatus) error { return r.db.Save(status).Error }
+func (r *RHRepository) GetStatusByID(id uint) (*models.RHStatus, error) {
+	var status models.RHStatus
+	err := r.db.Preload("Usuario.Departamento").Preload("CriadoPor").First(&status, id).Error
+	return &status, err
+}
 
 func (r *RHRepository) ListComunicados() ([]models.RHComunicado, error) {
 	var comunicados []models.RHComunicado
